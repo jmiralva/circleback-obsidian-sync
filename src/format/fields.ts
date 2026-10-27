@@ -11,7 +11,48 @@ import type { Meeting } from "../api/schemas";
 import { emailsMatch } from "./owner";
 import { FALLBACK_TITLE } from "./paths";
 
-export type FileKind = "note" | "transcript" | "combined";
+export const FILE_KINDS = ["note", "transcript", "combined"] as const;
+export type FileKind = (typeof FILE_KINDS)[number];
+
+/** Whether a frontmatter value (`circleback_kind`) names a kind of file the plugin writes. */
+export function isFileKind(value: unknown): value is FileKind {
+  return typeof value === "string" && (FILE_KINDS as readonly string[]).includes(value);
+}
+
+/**
+ * Frontmatter keys that the plugin sets when it creates a file and never writes again.
+ * `buildFields` does not produce them.
+ */
+export const CREATION_KEYS: readonly string[] = ["type", "circleback_first_synced"];
+
+/**
+ * Every key `buildFields` can produce: the user-facing keys and the machine keys that are
+ * rewritten on every sync. The note writer (Task 10) removes the ones among these that are
+ * absent from a new record. It must not remove `CREATION_KEYS`.
+ */
+export const REWRITTEN_KEYS: readonly string[] = [
+  "title",
+  "created",
+  "duration",
+  "attendees",
+  "attendee_emails",
+  "circleback_tags",
+  "meeting_url",
+  "transcript",
+  "note",
+  "circleback_id",
+  "circleback_kind",
+  "circleback_account",
+  "circleback_updated",
+  "circleback_hash",
+  "circleback_url",
+];
+
+/**
+ * Every frontmatter key the plugin owns. Duplicate clean-up trashes a copy only if it has no
+ * key outside this list, because any other key is something the user added.
+ */
+export const PLUGIN_KEYS: readonly string[] = [...CREATION_KEYS, ...REWRITTEN_KEYS];
 
 export interface FieldsContext {
   accountLabel: string;

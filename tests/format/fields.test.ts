@@ -3,7 +3,15 @@ import { join } from "path";
 import * as v from "valibot";
 import { MEETING_START_FIELD } from "../../src/api/constants";
 import { MeetingListSchema, type Meeting } from "../../src/api/schemas";
-import { buildFields, meetingTitle } from "../../src/format/fields";
+import {
+  CREATION_KEYS,
+  FILE_KINDS,
+  PLUGIN_KEYS,
+  REWRITTEN_KEYS,
+  buildFields,
+  isFileKind,
+  meetingTitle,
+} from "../../src/format/fields";
 import { sanitizeTitle } from "../../src/format/paths";
 
 function fixtureMeetings(): Meeting[] {
@@ -176,5 +184,53 @@ describe("buildFields", () => {
         expect(fields).not.toHaveProperty("note");
       }
     });
+  });
+});
+
+describe("the plugin's frontmatter keys", () => {
+  it("REWRITTEN_KEYS is exactly the keys buildFields can produce", () => {
+    const produced = new Set<string>();
+    for (const kind of FILE_KINDS) {
+      for (const key of Object.keys(buildFields(one, { ...CTX, kind, linkTo: "Other.md" }))) produced.add(key);
+    }
+    expect([...produced].sort()).toEqual([...REWRITTEN_KEYS].sort());
+  });
+
+  it("CREATION_KEYS are the keys set once, which buildFields never produces", () => {
+    expect([...CREATION_KEYS].sort()).toEqual(["circleback_first_synced", "type"]);
+    for (const key of CREATION_KEYS) expect(REWRITTEN_KEYS).not.toContain(key);
+  });
+
+  it("PLUGIN_KEYS is every key the plugin owns, with no repeats", () => {
+    expect([...PLUGIN_KEYS].sort()).toEqual([...CREATION_KEYS, ...REWRITTEN_KEYS].sort());
+    expect(new Set(PLUGIN_KEYS).size).toBe(PLUGIN_KEYS.length);
+    for (const key of [
+      "circleback_id",
+      "circleback_kind",
+      "circleback_account",
+      "circleback_updated",
+      "circleback_first_synced",
+      "circleback_hash",
+      "circleback_url",
+      "title",
+      "created",
+      "duration",
+      "attendees",
+      "attendee_emails",
+      "circleback_tags",
+      "meeting_url",
+      "transcript",
+      "note",
+      "type",
+    ]) {
+      expect(PLUGIN_KEYS).toContain(key);
+    }
+  });
+});
+
+describe("isFileKind", () => {
+  it("accepts the three kinds and nothing else", () => {
+    for (const kind of FILE_KINDS) expect(isFileKind(kind)).toBe(true);
+    for (const other of ["Note", "", "notes", null, undefined, 1, ["note"]]) expect(isFileKind(other)).toBe(false);
   });
 });
