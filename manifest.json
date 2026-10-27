@@ -1,0 +1,9 @@
+{
+  "id": "circleback-sync",
+  "name": "Circleback Sync",
+  "version": "0.1.0",
+  "minAppVersion": "1.11.4",
+  "description": "Sync meeting notes and transcripts from Circleback into your vault.",
+  "author": "Jorge Mir Alvarez",
+  "isDesktopOnly": true
+}
