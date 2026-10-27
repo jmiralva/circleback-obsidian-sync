@@ -36,8 +36,14 @@ type StringFieldOfMeeting = {
 export type MeetingStartField = Extract<StringFieldOfMeeting, "createdAt" | "updatedAt">;
 
 // PROVISIONAL: confirm with the Task 2 API probe
-/** The field that says when a meeting happened. The list has no date filter, so this decides the sync window. */
-export const MEETING_START_FIELD: MeetingStartField = "createdAt";
+/**
+ * The field that says when a meeting happened. The list has no date filter, so this decides the sync window.
+ *
+ * `satisfies` rather than a `: MeetingStartField` annotation, so that `typeof MEETING_START_FIELD` is the one
+ * field named here and not the whole union. Types built from it (`Pick<Meeting, typeof MEETING_START_FIELD>`)
+ * then ask for that field only, and switching the value breaks every place that hard-codes the old one.
+ */
+export const MEETING_START_FIELD = "createdAt" satisfies MeetingStartField;
 
 // PROVISIONAL: confirm with the Task 2 API probe
 /** Statuses that mean the key is wrong or revoked, as opposed to "not allowed to see this" (403). */
