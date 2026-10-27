@@ -6,6 +6,7 @@ import {
   MEETING_START_FIELD,
   NOTES_HAVE_ACTION_ITEMS,
   SITE_ORIGIN,
+  circlebackUrl,
   serializeStatuses,
 } from "../../src/api/constants";
 import type { Meeting } from "../../src/api/schemas";
@@ -14,6 +15,10 @@ describe("constants", () => {
   it("has the final base URLs", () => {
     expect(API_BASE).toBe("https://circleback.ai/api");
     expect(SITE_ORIGIN).toBe("https://circleback.ai");
+  });
+
+  it("builds a meeting's Circleback link from its id", () => {
+    expect(circlebackUrl("abc-123")).toBe("https://circleback.ai/meetings/abc-123");
   });
 
   it("starts with the provisional values the probe will confirm", () => {

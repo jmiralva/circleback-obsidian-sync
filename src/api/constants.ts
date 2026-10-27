@@ -11,6 +11,11 @@ export const API_BASE = "https://circleback.ai/api";
 /** The origin that relative `Link` header URLs resolve against. */
 export const SITE_ORIGIN = "https://circleback.ai";
 
+/** The meeting's page on Circleback. Not `meeting.url`, which is the video-call link. */
+export function circlebackUrl(meetingId: string): string {
+  return `${SITE_ORIGIN}/meetings/${meetingId}`;
+}
+
 // PROVISIONAL: confirm with the Task 2 API probe
 /**
  * The `statuses` filter that limits the list to finished meetings. The OpenAPI spec gives

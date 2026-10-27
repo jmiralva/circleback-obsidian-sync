@@ -20,7 +20,8 @@ import { meetingLocal, type Moment } from "../util/time";
  */
 export type PathMeeting = Pick<Meeting, "name" | typeof MEETING_START_FIELD>;
 
-const FALLBACK_TITLE = "Untitled meeting";
+/** What a meeting with no usable title is called, in its file name and in its `title` field. */
+export const FALLBACK_TITLE = "Untitled meeting";
 const MAX_TITLE_LENGTH = 200;
 
 // Slashes, colons and the rest cannot appear in a file name on some platform; # ^ [ ] |
