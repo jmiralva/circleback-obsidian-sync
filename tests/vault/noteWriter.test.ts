@@ -474,7 +474,7 @@ describe("NoteWriter.isCurrent", () => {
     const combined = context({ transcriptHandling: "combined" });
     await writer.write(ONE, SEGMENTS, combined);
     expect(writer.isCurrent(ONE, combined, true)).toBe(true);
-    // A separate note does not count as the combined file.
+    // With separate transcripts, the combined file has yet to be turned into a note.
     expect(writer.isCurrent(ONE, context(), false)).toBe(false);
   });
 
@@ -536,6 +536,132 @@ describe("NoteWriter in sections mode", () => {
     expect(writer.isCurrent(ONE, context(sections), false)).toBe(false);
     expect(writer.isCurrent(edited(), context(sections), true)).toBe(false);
     expect(writer.isCurrent(ONE, context({ ...sections, transcriptHandling: "combined" }), true)).toBe(false);
+  });
+});
+
+describe("NoteWriter note and combined files", () => {
+  const combined = context({ transcriptHandling: "combined" });
+
+  it("turns the note into the combined file when transcripts switch to combined", async () => {
+    const { app, index, writer } = await setup();
+    await writer.write(ONE, SEGMENTS, context());
+    await addFrontmatter(app, NOTE, { people: ["[[Person A]]"] });
+    await index.build();
+    const note = file(app, NOTE);
+    const transcriptBefore = app.fileText(TRANSCRIPT);
+    expect(writer.isCurrent(ONE, combined, true)).toBe(false);
+
+    const result = await writer.write(ONE, SEGMENTS, combined);
+
+    expect(result).toMatchObject({ note, transcript: null, oldStart: ONE.createdAt, changed: true });
+    expect(markdownPaths(app)).toEqual([NOTE, TRANSCRIPT]);
+    const fm = frontmatter(app, NOTE);
+    expect(fm).toMatchObject({
+      circleback_kind: "combined",
+      type: "note",
+      people: ["[[Person A]]"],
+      circleback_first_synced: NOW,
+    });
+    expect(fm).not.toHaveProperty("transcript");
+    expect(bodyOf(app, NOTE)).toContain("\n## Transcript\n\n### Person A (");
+    // The transcript file from separate mode is left exactly as it was.
+    expect(app.fileText(TRANSCRIPT)).toBe(transcriptBefore);
+    expect(index.find(ONE.id, "note")).toEqual([]);
+    expect(index.find(ONE.id, "combined")).toEqual([note]);
+    expect(writer.isCurrent(ONE, combined, true)).toBe(true);
+  });
+
+  it("turns the combined file into a note when transcripts become separate files", async () => {
+    const { app, index, writer } = await setup();
+    await writer.write(ONE, SEGMENTS, combined);
+    const note = file(app, NOTE);
+    expect(writer.isCurrent(ONE, context(), true)).toBe(false);
+
+    const result = await writer.write(ONE, SEGMENTS, context());
+
+    expect(result.note).toBe(note);
+    expect(result.transcript?.path).toBe(TRANSCRIPT);
+    expect(markdownPaths(app)).toEqual([NOTE, TRANSCRIPT]);
+    expect(frontmatter(app, NOTE)).toMatchObject({ circleback_kind: "note", transcript: `[[${TRANSCRIPT}]]` });
+    expect(bodyOf(app, NOTE)).toBe(buildNoteBody(ONE, BODY_OPTIONS));
+    expect(index.find(ONE.id, "combined")).toEqual([]);
+    expect(index.find(ONE.id, "note")).toEqual([note]);
+  });
+
+  it("takes over an unindexed note of the other kind instead of adding a copy", async () => {
+    const { app, writer } = await setup();
+    await app.vault.createFolder("Circleback");
+    await app.vault.create(
+      NOTE,
+      fileText(
+        { title: "Meeting 1", created: ONE.createdAt, circleback_id: ONE.id, circleback_kind: "combined" },
+        "Old body.\n",
+      ),
+    );
+
+    await writer.write(ONE, null, context());
+
+    expect(markdownPaths(app)).toEqual([NOTE]);
+    expect(frontmatter(app, NOTE).circleback_kind).toBe("note");
+  });
+});
+
+describe("NoteWriter with notes off", () => {
+  const notesOff = { syncNotes: false };
+
+  it("writes only the transcript, without a note link", async () => {
+    const { app, writer } = await setup();
+    const result = await writer.write(ONE, SEGMENTS, context(notesOff));
+
+    expect(result).toMatchObject({ note: null, oldStart: null, changed: true });
+    expect(result.transcript?.path).toBe(TRANSCRIPT);
+    expect(markdownPaths(app)).toEqual([TRANSCRIPT]);
+    expect(frontmatter(app, TRANSCRIPT)).toMatchObject({ type: "transcript", circleback_kind: "transcript" });
+    expect(frontmatter(app, TRANSCRIPT)).not.toHaveProperty("note");
+  });
+
+  it("puts a same-location or combined transcript in the folder of the note's computed path", async () => {
+    for (const transcriptHandling of ["same-location", "combined"] as const) {
+      const { app, writer } = await setup();
+      const result = await writer.write(ONE, SEGMENTS, context({ ...notesOff, transcriptHandling }));
+      expect(result.transcript?.path).toBe("Circleback/Meeting 1-transcript.md");
+      expect(markdownPaths(app)).toEqual(["Circleback/Meeting 1-transcript.md"]);
+      expect(frontmatter(app, "Circleback/Meeting 1-transcript.md").circleback_kind).toBe("transcript");
+    }
+  });
+
+  it("writes nothing without a transcript", async () => {
+    const { app, writer } = await setup();
+    const spies = watchWrites(app);
+
+    const result = await writer.write(ONE, null, context(notesOff));
+
+    expect(result).toEqual({ note: null, transcript: null, oldStart: null, changed: false });
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+
+  it("leaves an existing note alone and drops the transcript's note link", async () => {
+    const { app, writer } = await setup();
+    await writer.write(ONE, SEGMENTS, context());
+    const noteBefore = app.fileText(NOTE);
+
+    await writer.write(edited(), SEGMENTS, context(notesOff));
+
+    expect(app.fileText(NOTE)).toBe(noteBefore);
+    expect(frontmatter(app, TRANSCRIPT).circleback_updated).toBe(LATER);
+    expect(frontmatter(app, TRANSCRIPT)).not.toHaveProperty("note");
+  });
+
+  it("is current only for a current transcript", async () => {
+    const { writer } = await setup();
+    const off = context(notesOff);
+    expect(writer.isCurrent(ONE, off, true)).toBe(false);
+
+    await writer.write(ONE, SEGMENTS, off);
+    expect(writer.isCurrent(ONE, off, true)).toBe(true);
+    expect(writer.isCurrent(ONE, off, false)).toBe(false);
+    expect(writer.isCurrent(edited(), off, true)).toBe(false);
+    expect(writer.isCurrent(ONE, context({ ...notesOff, transcriptHandling: "combined" }), true)).toBe(true);
   });
 });
 
@@ -769,17 +895,43 @@ describe("NoteWriter paths", () => {
     ]);
   });
 
-  it("follows a date change into the new day folder and reports the old start", async () => {
+  it("renames in place on a date change under a date-based subfolder, and reports the old start", async () => {
     const { app, writer } = await setup();
-    const daily = context({ subfolderPattern: "day" });
+    const daily = context({ subfolderPattern: "day", filenamePattern: "{date} - {title}" });
     await writer.write(ONE, null, daily);
-    expect(markdownPaths(app)).toEqual(["Circleback/2026-10-26/Meeting 1.md"]);
+    expect(markdownPaths(app)).toEqual(["Circleback/2026-10-26/2026-10-26 - Meeting 1.md"]);
 
     const result = await writer.write(edited({ createdAt: "2026-10-27T15:00:00.000Z" }), null, daily);
 
+    // The file name follows the new date; the folder stays: the plugin never moves a file into another folder.
     expect(result.oldStart).toBe(ONE.createdAt);
-    expect(markdownPaths(app)).toEqual(["Circleback/2026-10-27/Meeting 1.md"]);
-    expect(frontmatter(app, "Circleback/2026-10-27/Meeting 1.md").created).toBe("2026-10-27T15:00:00.000Z");
+    expect(markdownPaths(app)).toEqual(["Circleback/2026-10-26/2026-10-27 - Meeting 1.md"]);
+    expect(app.exists("Circleback/2026-10-27")).toBe(false);
+    expect(frontmatter(app, "Circleback/2026-10-26/2026-10-27 - Meeting 1.md").created).toBe("2026-10-27T15:00:00.000Z");
+  });
+
+  it("keeps a file where it is when a date change alters only the folder part of its path", async () => {
+    const { app, writer } = await setup();
+    const daily = context({ subfolderPattern: "day" });
+    await writer.write(ONE, null, daily);
+
+    await writer.write(edited({ createdAt: "2026-10-27T15:00:00.000Z" }), null, daily);
+
+    expect(markdownPaths(app)).toEqual(["Circleback/2026-10-26/Meeting 1.md"]);
+    expect(app.exists("Circleback/2026-10-27")).toBe(false);
+  });
+
+  it("renames to a collision candidate when the new name is taken", async () => {
+    const { app, writer } = await setup();
+    const other = meeting({ id: "fixture-meeting-0101", name: "Planning sync", createdAt: "2026-10-26T19:00:00.000Z" });
+    await writer.write(other, null, context());
+    await writer.write(ONE, null, context());
+
+    await writer.write(edited({ name: "Planning sync" }), null, context());
+
+    expect(markdownPaths(app)).toEqual(["Circleback/Planning sync-2026-10-26_10-00.md", "Circleback/Planning sync.md"]);
+    expect(frontmatter(app, "Circleback/Planning sync.md").circleback_id).toBe("fixture-meeting-0101");
+    expect(frontmatter(app, "Circleback/Planning sync-2026-10-26_10-00.md").circleback_id).toBe(ONE.id);
   });
 
   it("sees its own writes within a run", async () => {

@@ -1,14 +1,16 @@
 // Writes a meeting's note and transcript into the vault, and keeps them up to date.
 //
 // This is the code that touches the user's notes, so it keeps three promises:
-// - One file per meeting and kind. Files are found by (circleback_id, circleback_kind) through
-//   the index, wherever they were moved or renamed. A file of this meeting that the index has
-//   not seen yet (synced in from another device mid-run) is taken over, never copied.
+// - One note and one transcript per meeting. Files are found by (circleback_id, circleback_kind)
+//   through the index, wherever they were moved or renamed. A `note` and a `combined` file are
+//   one identity, the meeting's note: switching transcript handling turns the existing file into
+//   the other kind in place. A file of this meeting that the index has not seen yet (synced in
+//   from another device mid-run) is taken over, never copied.
 // - The user's frontmatter survives. It changes only through processFrontMatter, key by key,
 //   and the only keys ever removed are ones the plugin writes on that kind of file.
-// - A file the user filed stays put. A file is renamed only while it sits exactly where the
-//   plugin would have put it under its previous title and date, so neither a move by the user
-//   nor a change of folder settings ever moves it.
+// - A file the user filed stays put, and no file ever changes folder. A file is renamed (in its
+//   folder) only while it sits exactly where the plugin would have put it under its previous
+//   title and date, so neither a move by the user nor a change of settings ever moves it.
 //
 // The transcript is written before the note, and the note's frontmatter (which carries
 // `circleback_updated`) is the very last write. A failure anywhere leaves the note looking out
@@ -17,7 +19,7 @@ import { TFile, normalizePath } from "obsidian";
 import type { App, TAbstractFile } from "obsidian";
 import { MEETING_START_FIELD } from "../api/constants";
 import type { Meeting, TranscriptSegment } from "../api/schemas";
-import { REWRITTEN_KEYS, buildFields, meetingTitle, type FileKind } from "../format/fields";
+import { REWRITTEN_KEYS, buildFields, isFileKind, meetingTitle, type FileKind } from "../format/fields";
 import { buildNoteBody } from "../format/noteBody";
 import { collisionCandidate, notePath, transcriptPath, type PathMeeting } from "../format/paths";
 import { buildTranscriptBody } from "../format/transcript";
@@ -43,7 +45,7 @@ export type WriteContext = {
 };
 
 export type WriteResult = {
-  /** The note (the combined file in combined mode). Null in sections mode, which has no note file. */
+  /** The note (the combined file in combined mode). Null when there is no note file: sections mode, or notes off. */
   note: TFile | null;
   /** The separate transcript file, written now or kept from an earlier run. Null in combined mode. */
   transcript: TFile | null;
@@ -53,26 +55,21 @@ export type WriteResult = {
   changed: boolean;
 };
 
+type NoteKind = Extract<FileKind, "note" | "combined">;
+
 /** Where one file of a meeting is to be after a write. */
 interface Placement {
-  /** The meeting's existing file of this kind, or null when one is to be created. */
+  /** The meeting's existing file, or null when one is to be created. */
   file: TFile | null;
   /** That file's frontmatter as the index holds it (the plugin's last write); empty for a new file. */
   frontmatter: Record<string, unknown>;
-  /** Where the file is to be: where it already is, a rename target, or where to create it. */
+  /** Where the file is to be: where it already is, a new name in its folder, or where to create it. */
   path: string;
-}
-
-/** The note and transcript paths a transcript's location is worked out from. */
-interface NotePaths {
-  /** Where the note is before this write: the transcript's previous path is computed beside it. */
-  before: string;
-  /** Where the note is after this write: a same-location transcript goes beside it. */
-  after: string;
 }
 
 // The fence `splitFrontmatter` takes for the start of a frontmatter block.
 const OPENING_FENCE = /^---[ \t]*\r?\n/;
+const TRANSCRIPT: readonly FileKind[] = ["transcript"];
 
 export class NoteWriter {
   constructor(
@@ -84,20 +81,24 @@ export class NoteWriter {
    * Whether the vault already holds this version of the meeting, so there is nothing to write
    * (and no transcript to fetch). This is the rule `write` skips by. Never true when forced.
    *
-   * With files, the note (or combined file) has to exist with a `circleback_updated` no older
-   * than the meeting's `updatedAt`, and when `expectTranscript` is true the transcript file has
-   * to exist too (in combined mode the combined file is the transcript). In sections mode only
-   * the transcript is a file, so the answer is true only when a transcript is expected and its
-   * file is current; the engine rewrites the daily-note block otherwise.
+   * With a note file, the note has to be of the kind the settings call for (a note of the other
+   * kind is due to be turned into this one) with a `circleback_updated` no older than the
+   * meeting's `updatedAt`, and when `expectTranscript` is true the transcript file has to exist
+   * too (in combined mode the combined file is the transcript). Without a note file (sections
+   * mode, or notes off), the answer is true only when a transcript is expected and its file is
+   * current; the engine rewrites the daily-note block otherwise.
    */
   isCurrent(m: Meeting, ctx: WriteContext, expectTranscript: boolean): boolean {
     if (ctx.force) return false;
-    const combined = ctx.settings.transcriptHandling === "combined";
-    if (ctx.settings.saveAs === "sections") {
-      return expectTranscript && !combined && this.fileIsCurrent(this.liveFile(m.id, "transcript"), m);
+    const kind = noteKindFor(ctx.settings);
+    if (kind === null) {
+      return expectTranscript && hasLoneTranscript(ctx.settings) && this.fileIsCurrent(this.liveFile(m.id, TRANSCRIPT), m);
     }
-    if (!this.fileIsCurrent(this.liveFile(m.id, combined ? "combined" : "note"), m)) return false;
-    return !expectTranscript || combined || this.liveFile(m.id, "transcript") !== null;
+    const note = this.liveFile(m.id, noteKinds(kind));
+    if (note === null || this.index.frontmatter(note)?.circleback_kind !== kind || !this.fileIsCurrent(note, m)) {
+      return false;
+    }
+    return !expectTranscript || kind === "combined" || this.liveFile(m.id, TRANSCRIPT) !== null;
   }
 
   /**
@@ -105,42 +106,44 @@ export class NoteWriter {
    * are separate files), then its note. A null transcript (turned off, or not allowed) means
    * none is expected, and an existing transcript file is kept and still linked.
    *
-   * Nothing is written when `isCurrent` says the vault is up to date. In sections mode only the
-   * transcript file is written; the daily-note block is the engine's job.
+   * Nothing is written when `isCurrent` says the vault is up to date. Without a note file
+   * (sections mode, or notes off) only the transcript file is written, with no `note` link; the
+   * daily-note block is the engine's job.
    */
   async write(m: Meeting, transcript: TranscriptSegment[] | null, ctx: WriteContext): Promise<WriteResult> {
     if (this.isCurrent(m, ctx, transcript !== null)) return this.unchanged(m, ctx);
-    if (ctx.settings.saveAs === "sections") {
-      if (transcript === null || ctx.settings.transcriptHandling === "combined") return this.unchanged(m, ctx);
-      // With no note, a same-location transcript goes in the daily notes folder. Only the
-      // folder of this path is used.
-      const beside = normalizePath(`${ctx.dailyFolder}/note.md`);
-      const file = await this.writeTranscript(m, transcript, ctx, { before: beside, after: beside });
-      return { note: null, transcript: file, oldStart: null, changed: true };
-    }
-    return this.writeFiles(m, transcript, ctx);
+    const kind = noteKindFor(ctx.settings);
+    if (kind !== null) return this.writeFiles(m, kind, transcript, ctx);
+    if (transcript === null || !hasLoneTranscript(ctx.settings)) return this.unchanged(m, ctx);
+    const file = await this.writeLoneTranscript(m, transcript, ctx);
+    return { note: null, transcript: file, oldStart: null, changed: true };
   }
 
-  private async writeFiles(m: Meeting, transcript: TranscriptSegment[] | null, ctx: WriteContext): Promise<WriteResult> {
+  private async writeFiles(
+    m: Meeting,
+    kind: NoteKind,
+    transcript: TranscriptSegment[] | null,
+    ctx: WriteContext,
+  ): Promise<WriteResult> {
     const { settings } = ctx;
-    const combined = settings.transcriptHandling === "combined";
-    const kind: FileKind = combined ? "combined" : "note";
+    const combined = kind === "combined";
 
     // The note's place is settled first, so that the transcript can link to it.
     const note = await this.place(
       m,
-      kind,
+      noteKinds(kind),
       notePath(settings, m, ctx.dailyFolder),
       (previous) => notePath(settings, previous, ctx.dailyFolder),
       [],
     );
+    const noteBefore = note.file?.path ?? note.path;
 
     let transcriptFile: TFile | null = null;
     if (!combined) {
       transcriptFile =
         transcript === null
-          ? this.liveFile(m.id, "transcript")
-          : await this.writeTranscript(m, transcript, ctx, { before: note.file?.path ?? note.path, after: note.path }, note.path);
+          ? this.liveFile(m.id, TRANSCRIPT)
+          : await this.writeTranscript(m, transcript, ctx, settings, note.path, () => noteBefore, note.path);
     }
 
     let body = buildNoteBody(m, {
@@ -157,20 +160,41 @@ export class NoteWriter {
     return { note: file, transcript: transcriptFile, oldStart: validStart(note.frontmatter), changed: true };
   }
 
+  /**
+   * The transcript of a meeting with no note file. A same-location transcript goes in the folder
+   * the note would be in: the daily notes folder in sections mode, else the folder of the note's
+   * computed path. With notes off and transcripts set to combined there is no note to hold the
+   * transcript, so it goes there too.
+   */
+  private async writeLoneTranscript(m: Meeting, segs: TranscriptSegment[], ctx: WriteContext): Promise<TFile> {
+    const { settings, dailyFolder } = ctx;
+    const pathSettings: CirclebackSyncSettings =
+      settings.transcriptHandling === "combined" ? { ...settings, transcriptHandling: "same-location" } : settings;
+    // transcriptPath only reads the folder of the note path it is given.
+    const besideNote = (meeting: PathMeeting): string =>
+      settings.saveAs === "sections" ? normalizePath(`${dailyFolder}/note.md`) : notePath(settings, meeting, dailyFolder);
+    return this.writeTranscript(m, segs, ctx, pathSettings, besideNote(m), besideNote);
+  }
+
+  /**
+   * @param noteNow The note path (after this write) that a same-location transcript goes beside.
+   * @param noteBefore The note path that a same-location transcript's previous path is computed beside.
+   * @param linkTo The note to link to, if any. Its path also counts as taken, since the note may not be there yet.
+   */
   private async writeTranscript(
     m: Meeting,
     segs: TranscriptSegment[],
     ctx: WriteContext,
-    notePaths: NotePaths,
+    pathSettings: CirclebackSyncSettings,
+    noteNow: string,
+    noteBefore: (previous: PathMeeting) => string,
     linkTo?: string,
   ): Promise<TFile> {
-    const { settings } = ctx;
     const placement = await this.place(
       m,
-      "transcript",
-      transcriptPath(settings, m, notePaths.after),
-      (previous) => transcriptPath(settings, previous, notePaths.before),
-      // The note may not be at its path yet; the transcript must not take it.
+      TRANSCRIPT,
+      transcriptPath(pathSettings, m, noteNow),
+      (previous) => transcriptPath(pathSettings, previous, noteBefore(previous)),
       linkTo === undefined ? [] : [linkTo],
     );
     const body = this.transcriptText(m, segs, ctx);
@@ -179,11 +203,12 @@ export class NoteWriter {
 
   /** What `write` returns when it writes nothing: the files the meeting already has. */
   private unchanged(m: Meeting, ctx: WriteContext): WriteResult {
-    const combined = ctx.settings.transcriptHandling === "combined";
-    const note = ctx.settings.saveAs === "sections" ? null : this.liveFile(m.id, combined ? "combined" : "note");
+    const kind = noteKindFor(ctx.settings);
+    const note = kind === null ? null : this.liveFile(m.id, noteKinds(kind));
+    const separate = kind === null ? hasLoneTranscript(ctx.settings) : kind === "note";
     return {
       note,
-      transcript: combined ? null : this.liveFile(m.id, "transcript"),
+      transcript: separate ? this.liveFile(m.id, TRANSCRIPT) : null,
       oldStart: note === null ? null : validStart(this.index.frontmatter(note) ?? {}),
       changed: false,
     };
@@ -206,46 +231,47 @@ export class NoteWriter {
   }
 
   /**
-   * Decides where a meeting's file of one kind is to be.
+   * Decides where a meeting's file is to be.
    *
-   * An existing file stays where it is, unless it is still exactly at `previousPathOf` its
-   * previous title and date and the meeting now computes to a different path: then it moves
-   * there (or to the first free collision candidate). A new file goes to `computed`, or the first
-   * collision candidate that is free.
+   * An existing file (the first match of `kinds`, in that order) stays where it is, unless it is
+   * still exactly at `previousPathOf` the title and date it was last written with. Then it takes
+   * the newly computed file name in the folder it is in (or the first free collision candidate),
+   * never another folder. A new file goes to `computed`, or the first free collision candidate.
    *
    * @param computed Where the plugin puts this file now.
-   * @param previousPathOf Where the plugin would have put it under the title and date it was last written with.
+   * @param previousPathOf Where the plugin would have put it under an earlier title and date.
    * @param reserved Paths that count as taken although nothing is there yet.
    */
   private async place(
     m: Meeting,
-    kind: FileKind,
+    kinds: readonly FileKind[],
     computed: string,
     previousPathOf: (previous: PathMeeting) => string,
     reserved: readonly string[],
   ): Promise<Placement> {
     const start = meetingLocal(m[MEETING_START_FIELD]);
-    let file = this.liveFile(m.id, kind);
+    let file = this.liveFile(m.id, kinds);
     if (file === null) {
-      const spot = await this.newSpot(m.id, kind, computed, start, reserved);
+      const spot = await this.newSpot(m.id, kinds, computed, start, reserved);
       if (typeof spot === "string") return { file: null, frontmatter: {}, path: spot };
       file = spot;
     }
 
     const frontmatter = this.index.frontmatter(file) ?? {};
     const previous = previousMeeting(frontmatter);
-    const stays = previous === null || file.path !== previousPathOf(previous) || computed === file.path;
-    return { file, frontmatter, path: stays ? file.path : this.freePath(computed, file, start, reserved) };
+    if (previous === null || file.path !== previousPathOf(previous)) return { file, frontmatter, path: file.path };
+    const renamed = withFileName(file.path, computed);
+    return { file, frontmatter, path: renamed === file.path ? renamed : this.freePath(renamed, file, start, reserved) };
   }
 
   /**
    * The first free path among `computed` and its collision candidates. If one of them holds a
-   * file of this meeting and kind that the index did not know, that file is returned instead,
-   * to be updated where it is.
+   * file of this meeting (of one of `kinds`) that the index did not know, that file is returned
+   * instead, to be updated where it is.
    */
   private async newSpot(
     id: string,
-    kind: FileKind,
+    kinds: readonly FileKind[],
     computed: string,
     start: Moment,
     reserved: readonly string[],
@@ -255,14 +281,14 @@ export class NoteWriter {
       if (isReserved(candidate, reserved)) continue;
       const occupant = this.occupant(candidate, null);
       if (occupant === null) return candidate;
-      if (occupant instanceof TFile && (await this.claim(occupant, id, kind))) return occupant;
+      if (occupant instanceof TFile && (await this.claim(occupant, id, kinds))) return occupant;
     }
   }
 
-  /** The first free path among `computed` and its collision candidates, for moving `self` there. */
-  private freePath(computed: string, self: TFile, start: Moment, reserved: readonly string[]): string {
+  /** The first free path among `target` and its collision candidates, for renaming `self` there. */
+  private freePath(target: string, self: TFile, start: Moment, reserved: readonly string[]): string {
     for (let n = 0; ; n++) {
-      const candidate = n === 0 ? computed : collisionCandidate(computed, start, n);
+      const candidate = n === 0 ? target : collisionCandidate(target, start, n);
       if (!isReserved(candidate, reserved) && this.occupant(candidate, self) === null) return candidate;
     }
   }
@@ -278,8 +304,8 @@ export class NoteWriter {
     return this.app.vault.getFiles().find((other) => other !== self && other.path.toLowerCase() === wanted) ?? null;
   }
 
-  /** Whether a file the index did not know is this meeting's file of this kind. If so, the index learns it. */
-  private async claim(file: TFile, id: string, kind: FileKind): Promise<boolean> {
+  /** Whether a file the index did not know is this meeting's file of one of `kinds`. If so, the index learns it. */
+  private async claim(file: TFile, id: string, kinds: readonly FileKind[]): Promise<boolean> {
     let frontmatter: Record<string, unknown> | null;
     try {
       frontmatter = await readFrontmatter(this.app, file);
@@ -287,19 +313,23 @@ export class NoteWriter {
       logger.warn(`Could not read ${file.path}; treating its path as taken.`, error);
       return false;
     }
-    if (frontmatter?.circleback_id !== id || frontmatter.circleback_kind !== kind) return false;
+    const kind = frontmatter?.circleback_kind;
+    if (frontmatter?.circleback_id !== id || !isFileKind(kind) || !kinds.includes(kind)) return false;
     this.index.upsert(file, frontmatter);
     return true;
   }
 
   /**
-   * The meeting's file of this kind: the first the index lists (oldest first) that is still in
-   * the vault. A file deleted or trashed since the index saw it is dropped from the index.
+   * The meeting's file: the first file still in the vault that the index lists (oldest first)
+   * for the first of `kinds`, else for the next. A file deleted or trashed since the index saw
+   * it is dropped from the index.
    */
-  private liveFile(id: string, kind: FileKind): TFile | null {
-    for (const file of this.index.find(id, kind)) {
-      if (this.app.vault.getAbstractFileByPath(file.path) === file) return file;
-      this.index.forget(file);
+  private liveFile(id: string, kinds: readonly FileKind[]): TFile | null {
+    for (const kind of kinds) {
+      for (const file of this.index.find(id, kind)) {
+        if (this.app.vault.getAbstractFileByPath(file.path) === file) return file;
+        this.index.forget(file);
+      }
     }
     return null;
   }
@@ -311,7 +341,7 @@ export class NoteWriter {
     return typeof written === "string" && Date.parse(written) >= Date.parse(m.updatedAt);
   }
 
-  /** Creates, or renames and updates, the file a placement describes. */
+  /** Creates, or renames and updates, the file a placement describes, as a file of `kind`. */
   private async writeFile(
     placement: Placement,
     kind: FileKind,
@@ -319,16 +349,17 @@ export class NoteWriter {
     fields: Record<string, unknown>,
     ctx: WriteContext,
   ): Promise<TFile> {
-    const { file, path } = placement;
+    const { file, path, frontmatter } = placement;
     if (file === null) return this.createFile(path, kind, body, fields, ctx.now());
 
     if (file.path !== path) {
-      await this.ensureFolders(path);
       await this.app.fileManager.renameFile(file, path);
-      this.index.upsert(file, placement.frontmatter);
+      this.index.upsert(file, frontmatter);
     }
     await this.replaceBody(file, body);
-    const removable = removableKeys(kind);
+    // A note turning into a combined file (or back) can also lose what it had as its old kind.
+    const before = frontmatter.circleback_kind;
+    const removable = new Set([...removableKeys(kind), ...(isFileKind(before) ? removableKeys(before) : [])]);
     await this.changeFrontmatter(file, (fm) => {
       for (const key of removable) if (!(key in fields)) delete fm[key];
       Object.assign(fm, fields);
@@ -387,7 +418,7 @@ export class NoteWriter {
     }
   }
 
-  /** Creates the folders above `path` that do not exist yet: create and rename need them. */
+  /** Creates the folders above `path` that do not exist yet: create needs them. */
   private async ensureFolders(path: string): Promise<void> {
     const segments = path.split("/").slice(0, -1);
     for (let depth = 1; depth <= segments.length; depth++) {
@@ -395,6 +426,25 @@ export class NoteWriter {
       if (this.app.vault.getAbstractFileByPath(folder) === null) await this.app.vault.createFolder(folder);
     }
   }
+}
+
+/** The kind of note file the settings call for, or null when there is none: sections mode, or notes off. */
+function noteKindFor(settings: CirclebackSyncSettings): NoteKind | null {
+  if (settings.saveAs === "sections" || !settings.syncNotes) return null;
+  return settings.transcriptHandling === "combined" ? "combined" : "note";
+}
+
+/** Note kinds to look a meeting's note up by: `note` and `combined` are one identity, this kind first. */
+function noteKinds(kind: NoteKind): readonly FileKind[] {
+  return kind === "note" ? ["note", "combined"] : ["combined", "note"];
+}
+
+/**
+ * Without a note file, whether a transcript gets a file of its own. In sections mode a combined
+ * transcript belongs in the daily-note block; with notes off there is nothing else to hold it.
+ */
+function hasLoneTranscript(settings: CirclebackSyncSettings): boolean {
+  return !settings.syncNotes || settings.transcriptHandling !== "combined";
 }
 
 /**
@@ -430,6 +480,13 @@ function previousMeeting(frontmatter: Record<string, unknown>): PathMeeting | nu
 function validStart(frontmatter: Record<string, unknown>): string | null {
   const { created } = frontmatter;
   return typeof created === "string" && meetingLocal(created).isValid() ? created : null;
+}
+
+/** `path` with its file name replaced by the file name of `computed`: the folder never changes. */
+function withFileName(path: string, computed: string): string {
+  const name = computed.slice(computed.lastIndexOf("/") + 1);
+  const slash = path.lastIndexOf("/");
+  return slash < 0 ? name : `${path.slice(0, slash)}/${name}`;
 }
 
 function isReserved(path: string, reserved: readonly string[]): boolean {
