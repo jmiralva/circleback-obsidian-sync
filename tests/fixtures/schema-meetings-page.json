@@ -1,0 +1,194 @@
+[
+  {
+    "id": "fixture-meeting-0001",
+    "name": "Meeting 1",
+    "createdAt": "2026-10-26T15:00:00.000Z",
+    "updatedAt": "2026-10-26T16:10:00.000Z",
+    "duration": 1800.5,
+    "url": "https://meet.example.com/abc-defg-hij",
+    "recordingUrl": null,
+    "tags": [
+      { "id": 1, "name": "Weekly", "description": null },
+      { "id": 2, "name": "Planning", "description": "Lorem ipsum planning meetings." }
+    ],
+    "icalUid": "meeting-1@example.com",
+    "attendees": [
+      {
+        "profileId": 1,
+        "name": "Owner Person",
+        "title": "Lorem Lead",
+        "companyName": "Example Co",
+        "email": "owner@example.com",
+        "isCalendarEventOrganizer": true,
+        "isCalendarInvitee": true
+      },
+      {
+        "profileId": 2,
+        "name": "Person A",
+        "title": null,
+        "companyName": "Example Co",
+        "email": "person.a@example.com",
+        "isCalendarEventOrganizer": false,
+        "isCalendarInvitee": true
+      },
+      {
+        "profileId": 3,
+        "name": "Person B",
+        "title": null,
+        "companyName": null,
+        "email": null,
+        "isCalendarEventOrganizer": false,
+        "isCalendarInvitee": false
+      }
+    ],
+    "notes": "#### Overview\n* Lorem ipsum dolor sit amet, consectetur adipiscing elit.\n* Sed do eiusmod tempor incididunt ut labore.\n\n#### Action Items\n* Person A to ut enim ad minim veniam.",
+    "privateNotes": "",
+    "actionItems": [
+      {
+        "id": 101,
+        "title": "Lorem ipsum dolor",
+        "description": "Sit amet consectetur adipiscing elit.",
+        "assignee": {
+          "profileId": 2,
+          "name": "Person A",
+          "title": null,
+          "companyName": "Example Co",
+          "email": "person.a@example.com"
+        },
+        "status": "PENDING"
+      },
+      {
+        "id": 102,
+        "title": "Sed do eiusmod",
+        "description": "Tempor incididunt ut labore et dolore.",
+        "assignee": {
+          "profileId": 1,
+          "name": "Owner Person",
+          "title": "Lorem Lead",
+          "companyName": "Example Co",
+          "email": "owner@example.com"
+        },
+        "status": "DONE"
+      },
+      {
+        "id": 103,
+        "title": "Magna aliqua",
+        "description": "Ut enim ad minim veniam.",
+        "assignee": null,
+        "status": "PENDING"
+      }
+    ],
+    "insights": {
+      "Questions": [
+        { "insight": "Lorem ipsum dolor sit amet?", "speaker": "Person A", "timestamp": 49.15 }
+      ],
+      "Customer details": [
+        {
+          "insight": { "Company name": "Example Co", "Number of employees": 120, "Is customer": true, "Notes": null },
+          "speaker": null,
+          "timestamp": null
+        }
+      ]
+    },
+    "linkAccess": "Viewer",
+    "calendarEvent": {
+      "id": 91,
+      "icalUid": "meeting-1@example.com",
+      "description": "Lorem ipsum calendar event.",
+      "platform": "GoogleCalendar",
+      "platformId": "fixture-event-1"
+    },
+    "sharedWith": [
+      { "profileId": 1, "name": "Owner Person", "access": "Owner", "email": "owner@example.com" },
+      { "teamId": 12, "name": "Team 1", "access": "Viewer" }
+    ]
+  },
+  {
+    "id": "fixture-meeting-0002",
+    "name": null,
+    "createdAt": "2026-10-28T04:30:00.000Z",
+    "updatedAt": "2026-10-28T05:15:00.000Z",
+    "duration": null,
+    "url": null,
+    "recordingUrl": null,
+    "tags": [],
+    "icalUid": null,
+    "attendees": [
+      {
+        "profileId": 1,
+        "name": "Owner Person",
+        "title": "Lorem Lead",
+        "companyName": "Example Co",
+        "email": "owner@example.com",
+        "isCalendarEventOrganizer": false,
+        "isCalendarInvitee": false
+      },
+      {
+        "profileId": 4,
+        "name": "Person C",
+        "title": null,
+        "companyName": null,
+        "email": "person.c@example.com",
+        "isCalendarEventOrganizer": false,
+        "isCalendarInvitee": false
+      }
+    ],
+    "notes": "#### Overview\n* Consectetur adipiscing elit sed do eiusmod.",
+    "privateNotes": "Lorem ipsum private note: ask Person C about the dolor deposit.",
+    "actionItems": [],
+    "insights": {},
+    "linkAccess": null,
+    "calendarEvent": null,
+    "sharedWith": [
+      { "profileId": 1, "name": "Owner Person", "access": "Owner", "email": "owner@example.com" },
+      { "workspaceId": 7, "name": "Workspace 1", "access": "LimitedViewer" }
+    ]
+  },
+  {
+    "id": "fixture-meeting-0003",
+    "name": "Meeting 3",
+    "createdAt": "2026-10-25T18:00:00.000Z",
+    "updatedAt": "2026-10-25T18:45:00.000Z",
+    "duration": 2700,
+    "url": "https://meet.example.com/klm-nopq-rst",
+    "recordingUrl": null,
+    "tags": [{ "id": 3, "name": "Customer", "description": null }],
+    "icalUid": "meeting-3@example.com",
+    "attendees": [
+      {
+        "profileId": 2,
+        "name": "Person A",
+        "title": null,
+        "companyName": "Example Co",
+        "email": "person.a@example.com",
+        "isCalendarEventOrganizer": true,
+        "isCalendarInvitee": true
+      },
+      {
+        "profileId": 3,
+        "name": "Person B",
+        "title": null,
+        "companyName": null,
+        "email": null,
+        "isCalendarEventOrganizer": false,
+        "isCalendarInvitee": true
+      }
+    ],
+    "notes": null,
+    "privateNotes": "",
+    "actionItems": [],
+    "insights": {},
+    "linkAccess": "LimitedViewer",
+    "calendarEvent": {
+      "id": 92,
+      "icalUid": "meeting-3@example.com",
+      "description": "Lorem ipsum calendar event.",
+      "platform": "MicrosoftOutlook",
+      "platformId": null
+    },
+    "sharedWith": [
+      { "profileId": 2, "name": "Person A", "access": "Owner", "email": "person.a@example.com" },
+      { "profileId": 1, "name": "Owner Person", "access": "Viewer", "email": "owner@example.com" }
+    ]
+  }
+]

@@ -1,0 +1,1 @@
+The `schema-*.json` files here are hand-written to the shape of the Circleback OpenAPI spec, with obviously fake people and text. They exist so the schemas and the code built on them can be tested before real responses are available, and Task 2 will replace them or add scrubbed probe fixtures next to them.

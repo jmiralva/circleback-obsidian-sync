@@ -1,0 +1,10 @@
+[
+  { "speaker": "Person A", "text": "Lorem ipsum dolor sit amet.", "timestamp": 0.5 },
+  { "speaker": "Person A", "text": "Consectetur adipiscing elit, sed do eiusmod.", "timestamp": 4.2 },
+  { "speaker": "Owner Person", "text": "Tempor incididunt ut labore et dolore.", "timestamp": 9.8 },
+  { "speaker": "Owner Person", "text": "Magna aliqua ut enim ad minim veniam.", "timestamp": 14.1 },
+  { "speaker": "Owner Person", "text": "Quis nostrud exercitation ullamco.", "timestamp": 19.6 },
+  { "speaker": null, "text": "Laboris nisi ut aliquip ex ea commodo.", "timestamp": 25 },
+  { "speaker": "Person B", "text": "Duis aute irure dolor in reprehenderit.", "timestamp": 31.7 },
+  { "speaker": "Person A", "text": "Excepteur sint occaecat cupidatat non proident.", "timestamp": 38.3 }
+]
