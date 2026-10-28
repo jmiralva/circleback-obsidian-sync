@@ -785,8 +785,9 @@ describe("SyncEngine.fullSync", () => {
 
   it("saves the cursor after each page, ignores the window, rewrites current notes, and clears the cursor when done", async () => {
     const old = meeting("old", { createdAt: "2025-01-06T15:00:00.000Z", updatedAt: "2025-01-06T16:00:00.000Z" });
+    // Newest first, as Circleback lists them: the regular sync stops at the old page.
     const { app, engine, server, device } = setup({
-      servers: { a: { email: A_EMAIL, pages: [[old], [meeting("m1")]] } },
+      servers: { a: { email: A_EMAIL, pages: [[meeting("m1")], [old]] } },
     });
     await sync(engine);
     const note = app.vault.getFileByPath(notePath("m1"));

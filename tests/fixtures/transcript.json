@@ -1,0 +1,1187 @@
+[
+  {
+    "speaker": "Person ER",
+    "text": "Do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad.",
+    "timestamp": 19.12
+  },
+  {
+    "speaker": "Person A",
+    "text": "Minim.",
+    "timestamp": 28.4
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat?",
+    "timestamp": 30.08
+  },
+  {
+    "speaker": "Person A",
+    "text": "Duis aute irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur.",
+    "timestamp": 48.44
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Excepteur sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit",
+    "timestamp": 54.76
+  },
+  {
+    "speaker": "Person A",
+    "text": "Anim id est laborum lorem ipsum dolor sit amet consectetur adipiscing elit.",
+    "timestamp": 63.48
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua enim.",
+    "timestamp": 67.64
+  },
+  {
+    "speaker": "Person A",
+    "text": "Ad.",
+    "timestamp": 88.32
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Minim veniam quis nostrud exercitation ullamco",
+    "timestamp": 89.84
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Laboris nisi aliquip ex ea commodo consequat duis aute irure in reprehenderit.",
+    "timestamp": 91.92
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Voluptate.",
+    "timestamp": 102.24
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident.",
+    "timestamp": 102.64
+  },
+  {
+    "speaker": "Person A",
+    "text": "Sunt culpa qui",
+    "timestamp": 124.4
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Officia deserunt mollit anim id est laborum.",
+    "timestamp": 126.24
+  },
+  {
+    "speaker": "Person A",
+    "text": "Voluptate.",
+    "timestamp": 128.16
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor?",
+    "timestamp": 128.8
+  },
+  {
+    "speaker": "Person A",
+    "text": "Incididunt.",
+    "timestamp": 135.56
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ut labore et dolore magna aliqua enim ad minim.",
+    "timestamp": 136.36
+  },
+  {
+    "speaker": "Person A",
+    "text": "Veniam quis nostrud exercitation",
+    "timestamp": 139.4
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in",
+    "timestamp": 146.12
+  },
+  {
+    "speaker": "Person A",
+    "text": "Reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur",
+    "timestamp": 164.2
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim?",
+    "timestamp": 167
+  },
+  {
+    "speaker": "Person A",
+    "text": "Id est laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed",
+    "timestamp": 190.48
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad",
+    "timestamp": 199.68
+  },
+  {
+    "speaker": "Person A",
+    "text": "Minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo?",
+    "timestamp": 202.4
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Consequat duis aute irure in reprehenderit voluptate velit esse.",
+    "timestamp": 253.56
+  },
+  {
+    "speaker": "Person A",
+    "text": "Cillum fugiat nulla pariatur?",
+    "timestamp": 258.76
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Excepteur sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit.",
+    "timestamp": 260.56
+  },
+  {
+    "speaker": "Person A",
+    "text": "Anim id est laborum lorem ipsum dolor sit amet consectetur adipiscing elit?",
+    "timestamp": 279.04
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Sed.",
+    "timestamp": 290.8
+  },
+  {
+    "speaker": "Person A",
+    "text": "Do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad.",
+    "timestamp": 293.36
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Minim veniam",
+    "timestamp": 301.52
+  },
+  {
+    "speaker": "Person A",
+    "text": "Quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis.",
+    "timestamp": 302.56
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Aute irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur.",
+    "timestamp": 313.32
+  },
+  {
+    "speaker": "Person A",
+    "text": "Sint.",
+    "timestamp": 319.8
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Occaecat cupidatat non proident sunt culpa qui officia deserunt.",
+    "timestamp": 320.52
+  },
+  {
+    "speaker": "Person A",
+    "text": "Sint.",
+    "timestamp": 323.8
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Mollit anim id est laborum lorem ipsum dolor sit amet consectetur adipiscing.",
+    "timestamp": 324.2
+  },
+  {
+    "speaker": "Person A",
+    "text": "Elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua",
+    "timestamp": 329
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Enim.",
+    "timestamp": 337.96
+  },
+  {
+    "speaker": "Person A",
+    "text": "Ad minim veniam quis.",
+    "timestamp": 338.52
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Nostrud exercitation.",
+    "timestamp": 340.04
+  },
+  {
+    "speaker": "Person A",
+    "text": "Ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in.",
+    "timestamp": 341.16
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Reprehenderit voluptate velit esse cillum fugiat.",
+    "timestamp": 349.84
+  },
+  {
+    "speaker": "Person A",
+    "text": "Nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui officia?",
+    "timestamp": 352.64
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Deserunt mollit anim id est laborum lorem ipsum dolor sit.",
+    "timestamp": 362.96
+  },
+  {
+    "speaker": "Person A",
+    "text": "Amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et.",
+    "timestamp": 369.28
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Dolore magna aliqua",
+    "timestamp": 376
+  },
+  {
+    "speaker": "Person A",
+    "text": "Enim ad minim veniam quis nostrud exercitation.",
+    "timestamp": 376.48
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Ullamco laboris nisi aliquip ex ea commodo.",
+    "timestamp": 378.16
+  },
+  {
+    "speaker": "Person A",
+    "text": "Consequat duis.",
+    "timestamp": 380.32
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Aute irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur.",
+    "timestamp": 380.8
+  },
+  {
+    "speaker": "Person A",
+    "text": "Sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim.",
+    "timestamp": 385.52
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Id est laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed.",
+    "timestamp": 403.8
+  },
+  {
+    "speaker": "Person A",
+    "text": "Do eiusmod tempor.",
+    "timestamp": 413.08
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Incididunt ut labore et dolore magna aliqua enim ad minim veniam quis.",
+    "timestamp": 414.6
+  },
+  {
+    "speaker": "Person A",
+    "text": "Nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute",
+    "timestamp": 423.48
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Irure in.",
+    "timestamp": 440.32
+  },
+  {
+    "speaker": "Person A",
+    "text": "Reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat?",
+    "timestamp": 440.8
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Non proident sunt culpa qui officia deserunt mollit anim id est laborum?",
+    "timestamp": 463.04
+  },
+  {
+    "speaker": "Person A",
+    "text": "Lorem ipsum",
+    "timestamp": 479.64
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt.",
+    "timestamp": 480.44
+  },
+  {
+    "speaker": "Person A",
+    "text": "Ad.",
+    "timestamp": 483
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ut labore et dolore magna.",
+    "timestamp": 483.48
+  },
+  {
+    "speaker": "Person A",
+    "text": "Aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip.",
+    "timestamp": 484.76
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ex ea commodo.",
+    "timestamp": 495.88
+  },
+  {
+    "speaker": "Person A",
+    "text": "Consequat",
+    "timestamp": 499.24
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Duis aute irure in.",
+    "timestamp": 499.4
+  },
+  {
+    "speaker": "Person A",
+    "text": "Reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint.",
+    "timestamp": 500.76
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Occaecat cupidatat non.",
+    "timestamp": 503.4
+  },
+  {
+    "speaker": "Person A",
+    "text": "Proident sunt culpa qui officia deserunt mollit anim id est laborum lorem.",
+    "timestamp": 504.68
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ipsum dolor sit amet consectetur adipiscing.",
+    "timestamp": 515.64
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Elit sed do eiusmod tempor.",
+    "timestamp": 518.16
+  },
+  {
+    "speaker": "Person A",
+    "text": "Incididunt ut labore et dolore magna aliqua enim ad.",
+    "timestamp": 520.08
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Minim veniam quis nostrud exercitation ullamco laboris nisi.",
+    "timestamp": 523.6
+  },
+  {
+    "speaker": "Person A",
+    "text": "Aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate velit.",
+    "timestamp": 525.68
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt",
+    "timestamp": 544.96
+  },
+  {
+    "speaker": "Person A",
+    "text": "Culpa qui officia deserunt mollit anim id est laborum lorem ipsum.",
+    "timestamp": 583.48
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut",
+    "timestamp": 589
+  },
+  {
+    "speaker": "Person A",
+    "text": "Labore et dolore",
+    "timestamp": 594.04
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Magna",
+    "timestamp": 598.04
+  },
+  {
+    "speaker": "Person A",
+    "text": "Aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip.",
+    "timestamp": 598.92
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ex.",
+    "timestamp": 622.32
+  },
+  {
+    "speaker": "Person A",
+    "text": "Ea commodo consequat duis aute irure in reprehenderit voluptate velit esse cillum.",
+    "timestamp": 623.12
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ex.",
+    "timestamp": 645.28
+  },
+  {
+    "speaker": "Person A",
+    "text": "Fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui.",
+    "timestamp": 645.92
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Officia deserunt mollit anim.",
+    "timestamp": 662.84
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Id est laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed.",
+    "timestamp": 664.12
+  },
+  {
+    "speaker": "Person A",
+    "text": "Do",
+    "timestamp": 673
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad minim.",
+    "timestamp": 674.12
+  },
+  {
+    "speaker": "Person A",
+    "text": "Veniam.",
+    "timestamp": 682.12
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis",
+    "timestamp": 682.6
+  },
+  {
+    "speaker": "Person A",
+    "text": "Aute",
+    "timestamp": 706.72
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint",
+    "timestamp": 706.88
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Occaecat.",
+    "timestamp": 732.48
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Cupidatat non proident sunt",
+    "timestamp": 733.16
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Culpa qui officia deserunt mollit anim id est laborum lorem ipsum dolor",
+    "timestamp": 735.72
+  },
+  {
+    "speaker": "Person A",
+    "text": "Sit amet consectetur",
+    "timestamp": 765.72
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore?",
+    "timestamp": 768.36
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi.",
+    "timestamp": 772.36
+  },
+  {
+    "speaker": "Person A",
+    "text": "Aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate velit.",
+    "timestamp": 789.76
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat.",
+    "timestamp": 806.64
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Non proident sunt culpa qui officia deserunt mollit",
+    "timestamp": 809.52
+  },
+  {
+    "speaker": "Person A",
+    "text": "Anim id est laborum lorem ipsum dolor sit amet consectetur adipiscing elit.",
+    "timestamp": 812.72
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Sed",
+    "timestamp": 823.32
+  },
+  {
+    "speaker": "Person A",
+    "text": "Do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad?",
+    "timestamp": 824.04
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo",
+    "timestamp": 844.2
+  },
+  {
+    "speaker": "Person A",
+    "text": "Consequat",
+    "timestamp": 855.16
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Duis aute irure in reprehenderit voluptate velit",
+    "timestamp": 855.64
+  },
+  {
+    "speaker": "Person A",
+    "text": "Esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt",
+    "timestamp": 858.28
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Culpa qui officia deserunt mollit anim id est laborum lorem ipsum dolor",
+    "timestamp": 950.8
+  },
+  {
+    "speaker": "Person A",
+    "text": "Sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore",
+    "timestamp": 961.52
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Et",
+    "timestamp": 969.52
+  },
+  {
+    "speaker": "Person A",
+    "text": "Dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris",
+    "timestamp": 969.84
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Nisi aliquip",
+    "timestamp": 985.36
+  },
+  {
+    "speaker": "Person A",
+    "text": "Ex ea commodo consequat duis aute irure in reprehenderit voluptate velit esse?",
+    "timestamp": 986.32
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa",
+    "timestamp": 1014.28
+  },
+  {
+    "speaker": "Person A",
+    "text": "Qui officia deserunt mollit anim id est laborum lorem ipsum dolor sit.",
+    "timestamp": 1019.24
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Amet consectetur adipiscing.",
+    "timestamp": 1024.2
+  },
+  {
+    "speaker": "Person A",
+    "text": "Elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+    "timestamp": 1025.16
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex.",
+    "timestamp": 1045.44
+  },
+  {
+    "speaker": "Person A",
+    "text": "Ea commodo.",
+    "timestamp": 1076.32
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Consequat duis aute.",
+    "timestamp": 1077.64
+  },
+  {
+    "speaker": "Person A",
+    "text": "Irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint.",
+    "timestamp": 1079.08
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Occaecat.",
+    "timestamp": 1096.36
+  },
+  {
+    "speaker": "Person A",
+    "text": "Cupidatat non proident sunt culpa qui officia deserunt mollit anim id est.",
+    "timestamp": 1097.4
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Incididunt.",
+    "timestamp": 1123.68
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Laborum lorem ipsum dolor sit amet consectetur.",
+    "timestamp": 1124.64
+  },
+  {
+    "speaker": "Person A",
+    "text": "Adipiscing",
+    "timestamp": 1130.16
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Elit sed do eiusmod tempor incididunt.",
+    "timestamp": 1130.64
+  },
+  {
+    "speaker": "Person A",
+    "text": "Adipiscing",
+    "timestamp": 1133.2
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ut labore et dolore magna aliqua.",
+    "timestamp": 1133.92
+  },
+  {
+    "speaker": "Person A",
+    "text": "Enim.",
+    "timestamp": 1136.72
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ad minim veniam quis nostrud.",
+    "timestamp": 1137.44
+  },
+  {
+    "speaker": "Person A",
+    "text": "Exercitation",
+    "timestamp": 1140.56
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in.",
+    "timestamp": 1143.44
+  },
+  {
+    "speaker": "Person A",
+    "text": "Reprehenderit",
+    "timestamp": 1153.28
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Voluptate velit esse",
+    "timestamp": 1153.6
+  },
+  {
+    "speaker": "Person A",
+    "text": "Cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa",
+    "timestamp": 1154.08
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Qui officia deserunt mollit anim id est laborum lorem ipsum dolor sit.",
+    "timestamp": 1161.6
+  },
+  {
+    "speaker": "Person A",
+    "text": "Amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et?",
+    "timestamp": 1167
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris.",
+    "timestamp": 1181.8
+  },
+  {
+    "speaker": "Person A",
+    "text": "Nisi aliquip.",
+    "timestamp": 1194.44
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ex ea commodo consequat duis aute irure in reprehenderit voluptate velit esse.",
+    "timestamp": 1195.24
+  },
+  {
+    "speaker": "Person A",
+    "text": "Cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa?",
+    "timestamp": 1210.96
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Qui officia deserunt mollit anim id est laborum lorem ipsum dolor sit.",
+    "timestamp": 1217.04
+  },
+  {
+    "speaker": "Person A",
+    "text": "Amet consectetur adipiscing elit sed do eiusmod tempor incididunt",
+    "timestamp": 1227.92
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ut labore et dolore",
+    "timestamp": 1236.16
+  },
+  {
+    "speaker": "Person A",
+    "text": "Magna aliqua enim ad",
+    "timestamp": 1237.28
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo.",
+    "timestamp": 1238.64
+  },
+  {
+    "speaker": "Person A",
+    "text": "Consequat duis aute irure",
+    "timestamp": 1244.32
+  },
+  {
+    "speaker": "Person ER",
+    "text": "In reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat",
+    "timestamp": 1246.88
+  },
+  {
+    "speaker": "Person A",
+    "text": "Cupidatat",
+    "timestamp": 1260.44
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Non proident sunt culpa qui officia.",
+    "timestamp": 1261.24
+  },
+  {
+    "speaker": "Person A",
+    "text": "Incididunt.",
+    "timestamp": 1269.16
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Deserunt mollit anim id est laborum lorem ipsum dolor sit amet consectetur.",
+    "timestamp": 1275.56
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Veniam.",
+    "timestamp": 1285.8
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore magna",
+    "timestamp": 1286.52
+  },
+  {
+    "speaker": "Person A",
+    "text": "Aliqua",
+    "timestamp": 1295.12
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Enim ad minim.",
+    "timestamp": 1295.6
+  },
+  {
+    "speaker": "Person A",
+    "text": "Veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat.",
+    "timestamp": 1297.28
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Duis aute.",
+    "timestamp": 1305.76
+  },
+  {
+    "speaker": "Person A",
+    "text": "Irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint",
+    "timestamp": 1306.64
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim id",
+    "timestamp": 1338.84
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Est laborum lorem ipsum dolor sit amet?",
+    "timestamp": 1347
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Consectetur adipiscing elit sed do eiusmod.",
+    "timestamp": 1349.8
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Incididunt.",
+    "timestamp": 1354.04
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam.",
+    "timestamp": 1354.84
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Quis nostrud.",
+    "timestamp": 1375.24
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure",
+    "timestamp": 1376.12
+  },
+  {
+    "speaker": "Person A",
+    "text": "In reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat",
+    "timestamp": 1387.12
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Cupidatat non proident sunt culpa qui officia deserunt mollit anim id est",
+    "timestamp": 1410.88
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod",
+    "timestamp": 1418.08
+  },
+  {
+    "speaker": "Person A",
+    "text": "Tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam",
+    "timestamp": 1484.88
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Quis nostrud exercitation?",
+    "timestamp": 1566.4
+  },
+  {
+    "speaker": "Person A",
+    "text": "Ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in?",
+    "timestamp": 1567.68
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Veniam.",
+    "timestamp": 1596.2
+  },
+  {
+    "speaker": "Person A",
+    "text": "Reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat.",
+    "timestamp": 1596.44
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Veniam.",
+    "timestamp": 1609.24
+  },
+  {
+    "speaker": "Person A",
+    "text": "Non proident sunt culpa qui officia deserunt mollit anim id est laborum.",
+    "timestamp": 1609.72
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Veniam.",
+    "timestamp": 1619.08
+  },
+  {
+    "speaker": "Person A",
+    "text": "Lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor.",
+    "timestamp": 1619.72
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Incididunt ut",
+    "timestamp": 1636.16
+  },
+  {
+    "speaker": "Person A",
+    "text": "Labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation",
+    "timestamp": 1636.88
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure in.",
+    "timestamp": 1648
+  },
+  {
+    "speaker": "Person A",
+    "text": "Reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat",
+    "timestamp": 1661.04
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Non",
+    "timestamp": 1697.72
+  },
+  {
+    "speaker": "Person A",
+    "text": "Proident sunt culpa qui officia deserunt mollit anim id est laborum lorem?",
+    "timestamp": 1698.2
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Ipsum dolor.",
+    "timestamp": 1711.48
+  },
+  {
+    "speaker": "Person A",
+    "text": "Sit amet consectetur adipiscing?",
+    "timestamp": 1712.2
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Elit sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.",
+    "timestamp": 1712.92
+  },
+  {
+    "speaker": "Person A",
+    "text": "Enim ad minim veniam quis nostrud exercitation ullamco laboris nisi",
+    "timestamp": 1719
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate velit",
+    "timestamp": 1723.52
+  },
+  {
+    "speaker": "Person A",
+    "text": "Esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt.",
+    "timestamp": 1728.96
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Nostrud exercitation.",
+    "timestamp": 1737.6
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Culpa qui officia deserunt mollit anim id est laborum lorem ipsum dolor",
+    "timestamp": 1740.24
+  },
+  {
+    "speaker": "Person A",
+    "text": "Sit amet.",
+    "timestamp": 1757.68
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Consectetur",
+    "timestamp": 1760.16
+  },
+  {
+    "speaker": "Person A",
+    "text": "Adipiscing elit sed.",
+    "timestamp": 1761.36
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad?",
+    "timestamp": 1762.88
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Veniam.",
+    "timestamp": 1791
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo.",
+    "timestamp": 1791.48
+  },
+  {
+    "speaker": "Person A",
+    "text": "Consequat duis aute irure in reprehenderit",
+    "timestamp": 1810.24
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Voluptate",
+    "timestamp": 1812.56
+  },
+  {
+    "speaker": "Person A",
+    "text": "Velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident",
+    "timestamp": 1815.28
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Sunt",
+    "timestamp": 1828
+  },
+  {
+    "speaker": "Person A",
+    "text": "Culpa qui officia deserunt mollit anim id est laborum lorem ipsum dolor",
+    "timestamp": 1828.32
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Sit amet consectetur adipiscing elit.",
+    "timestamp": 1833.92
+  },
+  {
+    "speaker": "Person A",
+    "text": "Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua",
+    "timestamp": 1851
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex",
+    "timestamp": 1856.44
+  },
+  {
+    "speaker": "Person A",
+    "text": "Ea commodo consequat duis aute",
+    "timestamp": 1865.64
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur sint",
+    "timestamp": 1867.48
+  },
+  {
+    "speaker": "Person A",
+    "text": "Occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim id.",
+    "timestamp": 1874.2
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Est",
+    "timestamp": 1895.28
+  },
+  {
+    "speaker": "Person A",
+    "text": "Laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod",
+    "timestamp": 1895.44
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Tempor incididunt",
+    "timestamp": 1933.04
+  },
+  {
+    "speaker": "Person A",
+    "text": "Ut.",
+    "timestamp": 1933.68
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Labore et dolore magna aliqua enim ad minim veniam quis nostrud exercitation",
+    "timestamp": 1935.12
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Ullamco laboris",
+    "timestamp": 1962.68
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Nisi aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate.",
+    "timestamp": 1963.32
+  },
+  {
+    "speaker": "Person A",
+    "text": "Velit esse cillum.",
+    "timestamp": 1971.64
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui",
+    "timestamp": 1972.36
+  },
+  {
+    "speaker": "Person A",
+    "text": "Officia deserunt mollit anim id est laborum lorem ipsum dolor sit amet.",
+    "timestamp": 1981.28
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Consectetur adipiscing elit sed do eiusmod tempor incididunt ut",
+    "timestamp": 2045.08
+  },
+  {
+    "speaker": "Person A",
+    "text": "Labore",
+    "timestamp": 2050.2
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Et",
+    "timestamp": 2050.52
+  },
+  {
+    "speaker": "Person A",
+    "text": "Dolore",
+    "timestamp": 2050.84
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Magna",
+    "timestamp": 2051
+  },
+  {
+    "speaker": "Person A",
+    "text": "Aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi aliquip.",
+    "timestamp": 2051.24
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Ex ea commodo consequat duis aute irure in reprehenderit voluptate velit esse",
+    "timestamp": 2064.84
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Cillum.",
+    "timestamp": 2083.76
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa qui.",
+    "timestamp": 2084.32
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Officia deserunt",
+    "timestamp": 2111.32
+  },
+  {
+    "speaker": "Person ER",
+    "text": "Mollit anim",
+    "timestamp": 2112.44
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Id est laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed.",
+    "timestamp": 2114.12
+  },
+  {
+    "speaker": "Person A",
+    "text": "Do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad.",
+    "timestamp": 2134.92
+  },
+  {
+    "speaker": "Person ES",
+    "text": "Minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea.",
+    "timestamp": 2143
+  }
+]

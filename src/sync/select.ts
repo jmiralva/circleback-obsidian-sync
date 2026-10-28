@@ -57,7 +57,8 @@ export function pageIsPastWindow(page: Meeting[], start: Date, newestFirst: bool
 
 /**
  * Whether a meeting is written by this sync. It must have notes (a meeting still being
- * processed has `notes: null` and is picked up on a later run), start inside the window
+ * processed, or one that never got a recording, has `notes: null`; it is picked up on a
+ * later run if notes arrive), start inside the window
  * (`start` is null for a full sync, which has no window), and pass the title filter.
  *
  * The filter looks at the title the note shows, so a meeting with no name is "Untitled

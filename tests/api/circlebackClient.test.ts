@@ -51,8 +51,9 @@ async function failure(promise: Promise<unknown>): Promise<CirclebackError> {
   throw new Error("expected the call to fail");
 }
 
-// FINISHED_STATUSES is provisional and empty until the API probe runs, which would make
-// every "sends the statuses" check vacuous. These tests fill it in for their duration.
+// FINISHED_STATUSES is empty (the API probe found no status value that filters anything),
+// which would make every "sends the statuses" check vacuous. These tests fill it in for
+// their duration, so the filter still works if a value is found later.
 const originalStatuses = [...FINISHED_STATUSES];
 function useStatuses(...statuses: string[]): void {
   FINISHED_STATUSES.splice(0, FINISHED_STATUSES.length, ...statuses);

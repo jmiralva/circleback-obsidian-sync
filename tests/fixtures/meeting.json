@@ -1,0 +1,131 @@
+{
+  "id": "probe-meeting-0003",
+  "linkAccess": null,
+  "url": "https://meet.example.com/meeting-0003",
+  "createdAt": "2026-10-27T15:17:09.013Z",
+  "updatedAt": "2026-10-27T15:56:22.970Z",
+  "duration": 2145.96,
+  "name": "Meeting 3",
+  "notes": "#### Overview\n* Laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod\n* Tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam\n* Quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis\n* Aute irure in reprehenderit voluptate velit esse cillum fugiat nulla pariatur excepteur\n\n#### Sint occaecat cupidatat non\n* Proident sunt culpa qui officia deserunt mollit anim id est laborum lorem\n* Ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt\n* Ut labore et dolore magna aliqua enim ad minim veniam quis nostrud\n* Exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis aute irure\n\n#### In reprehenderit voluptate velit esse\n* Cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa\n* Qui officia deserunt mollit anim id est laborum lorem ipsum dolor sit\n* Amet consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et\n* Dolore magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris\n* Nisi aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate\n* Velit esse cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident\n\n#### Sunt culpa qui\n* Officia deserunt mollit anim id est laborum lorem ipsum dolor sit amet\n* Consectetur adipiscing elit sed do eiusmod tempor incididunt ut labore et dolore\n* Magna aliqua enim ad minim veniam quis nostrud exercitation ullamco laboris nisi\n* Aliquip ex ea commodo consequat duis aute irure in reprehenderit voluptate velit\n\n#### Esse cillum fugiat nulla pariatur excepteur\n* Sint occaecat cupidatat non proident sunt culpa qui officia deserunt mollit anim\n* Id est laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed\n* Do eiusmod tempor incididunt ut labore et dolore magna aliqua enim ad\n* Minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo\n* Consequat duis aute irure in reprehenderit voluptate velit esse cillum fugiat nulla\n\n#### Pariatur excepteur sint occaecat\n* Cupidatat non proident sunt culpa qui officia deserunt mollit anim id est\n* Laborum lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod\n* Tempor incididunt ut labore et dolore magna aliqua enim ad minim veniam\n* Quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo consequat duis\n",
+  "icalUid": "event-0003@example.com",
+  "recordingUrl": "https://recordings.example.com/meeting-0003.mp4",
+  "tags": [],
+  "attendees": [
+    {
+      "profileId": 1002,
+      "name": "Person A",
+      "email": "person.a@example.com",
+      "title": "Job title 1",
+      "companyName": "Company 1",
+      "isCalendarInvitee": true,
+      "isCalendarEventOrganizer": false
+    },
+    {
+      "profileId": 1149,
+      "name": "Person EP",
+      "email": "person.ep@example.com",
+      "title": null,
+      "companyName": null,
+      "isCalendarInvitee": true,
+      "isCalendarEventOrganizer": false
+    },
+    {
+      "profileId": 1150,
+      "name": "Person EQ",
+      "email": "person.eq@example.com",
+      "title": null,
+      "companyName": null,
+      "isCalendarInvitee": true,
+      "isCalendarEventOrganizer": true
+    },
+    {
+      "profileId": 1151,
+      "name": "Person ER",
+      "email": null,
+      "title": null,
+      "companyName": null,
+      "isCalendarInvitee": false,
+      "isCalendarEventOrganizer": false
+    },
+    {
+      "profileId": 1152,
+      "name": "Person ES",
+      "email": null,
+      "title": null,
+      "companyName": null,
+      "isCalendarInvitee": false,
+      "isCalendarEventOrganizer": false
+    }
+  ],
+  "actionItems": [
+    {
+      "id": 5006,
+      "title": "Aute irure in reprehenderit voluptate velit esse",
+      "description": "Cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa.",
+      "status": "PENDING",
+      "assignee": {
+        "profileId": 1150,
+        "name": "Person EQ",
+        "email": "person.eq@example.com",
+        "title": null,
+        "companyName": null
+      }
+    },
+    {
+      "id": 5007,
+      "title": "Qui officia deserunt mollit anim id est laborum lorem",
+      "description": "Ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor incididunt.",
+      "status": "PENDING",
+      "assignee": {
+        "profileId": 1150,
+        "name": "Person EQ",
+        "email": "person.eq@example.com",
+        "title": null,
+        "companyName": null
+      }
+    },
+    {
+      "id": 5008,
+      "title": "Ut labore et dolore magna aliqua enim ad",
+      "description": "Minim veniam quis nostrud exercitation ullamco laboris nisi aliquip ex ea commodo.",
+      "status": "PENDING",
+      "assignee": {
+        "profileId": 1150,
+        "name": "Person EQ",
+        "email": "person.eq@example.com",
+        "title": null,
+        "companyName": null
+      }
+    },
+    {
+      "id": 5009,
+      "title": "Consequat duis aute irure in reprehenderit voluptate velit esse",
+      "description": "Cillum fugiat nulla pariatur excepteur sint occaecat cupidatat non proident sunt culpa.",
+      "status": "PENDING",
+      "assignee": {
+        "profileId": 1002,
+        "name": "Person A",
+        "email": "person.a@example.com",
+        "title": "Job title 1",
+        "companyName": "Company 1"
+      }
+    }
+  ],
+  "insights": {},
+  "calendarEvent": {
+    "id": 7003,
+    "platform": "GoogleCalendar",
+    "platformId": "calendar-event-0003",
+    "description": "",
+    "icalUid": "event-0003@example.com"
+  },
+  "privateNotes": "",
+  "sharedWith": [
+    {
+      "profileId": 1002,
+      "name": "Person A",
+      "email": "person.a@example.com",
+      "access": "Owner"
+    }
+  ]
+}

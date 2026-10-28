@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import * as v from "valibot";
 import { NOTES_HAVE_ACTION_ITEMS } from "../../src/api/constants";
-import { MeetingListSchema, type ActionItem, type Meeting } from "../../src/api/schemas";
+import { MeetingListSchema, MeetingSchema, type ActionItem, type Meeting } from "../../src/api/schemas";
 import { buildNoteBody } from "../../src/format/noteBody";
 
 function fixtureMeetings(): Meeting[] {
@@ -116,14 +116,23 @@ describe("buildNoteBody", () => {
     expect(body).toContain("- Send deck (Person B): first line\n  second line\n");
   });
 
-  it("skips action items when notes already have them", () => {
-    // Meeting 1's notes end with a "#### Action Items" section, which the provisional regex detects.
-    expect(NOTES_HAVE_ACTION_ITEMS.test(one.notes ?? "")).toBe(true);
+  it("adds action items even when the notes have a heading of that name", () => {
+    // Circleback's notes never carry an action items section (the API probe found none), so
+    // an "Action Items" heading in them is the meeting's own topic and does not stop the
+    // plugin's section. Meeting 1's hand-written notes end with "#### Action Items".
+    expect(NOTES_HAVE_ACTION_ITEMS.test(one.notes ?? "")).toBe(false);
     const body = buildNoteBody(one, ALL);
-    expect(body).not.toContain("## Action Items\n\n- ");
-    expect(body).not.toContain("Lorem ipsum dolor (Person A)");
-    // The notes' own section is still there.
     expect(body).toContain("#### Action Items\n* Person A to ut enim ad minim veniam.");
+    expect(body).toContain("\n## Action Items\n\n- ");
+  });
+
+  it("adds action items to real (scrubbed) Circleback notes", () => {
+    const raw = JSON.parse(readFileSync(join(__dirname, "..", "fixtures", "meeting.json"), "utf8")) as unknown;
+    const real = v.parse(MeetingSchema, raw);
+    expect(real.notes).toMatch(/^#### Overview\n/);
+    expect(real.actionItems.length).toBeGreaterThan(0);
+    const body = buildNoteBody(real, ALL);
+    expect(body).toContain(`\n## Action Items\n\n- ${real.actionItems[0].title.trim()}`);
   });
 
   it("omits action items when they are not included or there are none", () => {

@@ -24,7 +24,7 @@ export class CirclebackClient {
     this.#http = http;
   }
 
-  /** The account's requests per minute once a response has said (see `HttpClient.rateLimit`), else undefined. */
+  /** The latest `RateLimit-Limit` once a response has carried it (see `HttpClient.rateLimit`), else undefined. */
   get rateLimit(): number | undefined {
     return this.#http.rateLimit;
   }

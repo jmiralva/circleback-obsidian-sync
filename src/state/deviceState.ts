@@ -11,7 +11,7 @@ export interface AccountDeviceState {
   failing?: boolean;
   ownerEmail?: string;
   ownerName?: string;
-  /** The account's `RateLimit-Limit`, which tells free plans from paid ones. */
+  /** The account's latest `RateLimit-Limit`: its per-second or per-minute limit, whichever the last response reported. */
   rateLimit?: number;
   /** Where a full sync stopped, so it can resume after a restart. */
   fullSyncCursor?: string | null;

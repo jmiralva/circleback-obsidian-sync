@@ -21,10 +21,15 @@ describe("constants", () => {
     expect(circlebackUrl("abc-123")).toBe("https://circleback.ai/meetings/abc-123");
   });
 
-  it("starts with the provisional values the probe will confirm", () => {
-    expect(FINISHED_STATUSES).toEqual([]);
-    expect(LIST_IS_NEWEST_FIRST).toBe(false);
+  it("has the values the API probe settled", () => {
+    expect(LIST_IS_NEWEST_FIRST).toBe(true);
+    expect(MEETING_START_FIELD).toBe("createdAt");
     expect(AUTH_ERROR_STATUSES).toEqual([401]);
+  });
+
+  it("sends no statuses filter, since the probe found no status value that filters anything", () => {
+    expect(FINISHED_STATUSES).toEqual([]);
+    expect(serializeStatuses(FINISHED_STATUSES)).toBe("");
   });
 
   it("names a string field of a meeting as the start time", () => {
@@ -55,15 +60,10 @@ describe("serializeStatuses", () => {
 });
 
 describe("NOTES_HAVE_ACTION_ITEMS", () => {
-  it.each(["## Action Items", "#### action items", "# ACTION ITEMS  ", "intro\n### Action Items\n* x"])(
-    "matches %j",
-    (notes) => {
-      expect(NOTES_HAVE_ACTION_ITEMS.test(notes)).toBe(true);
-    },
-  );
-
-  it.each(["Action Items", "####### Action Items", "## Action Items for later", "#Action Items", "no heading here"])(
-    "does not match %j",
+  // Circleback's notes have no action items section (an Overview and topic headings only),
+  // so nothing in the notes stops the plugin from adding its own.
+  it.each(["## Action Items", "#### action items", "# ACTION ITEMS  ", "intro\n### Action Items\n* x", "", "no heading here"])(
+    "never matches %j",
     (notes) => {
       expect(NOTES_HAVE_ACTION_ITEMS.test(notes)).toBe(false);
     },

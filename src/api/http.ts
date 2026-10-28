@@ -83,9 +83,10 @@ function parseLimit(value: string | undefined): number | undefined {
 
 export class HttpClient {
   /**
-   * The account's requests per minute, from `RateLimit-Limit`: 20 on the free plan, 300 on
-   * paid plans. Undefined until a response carries the header. A caller that knows the
-   * value from an earlier run may set it to skip the call spacing.
+   * The latest `RateLimit-Limit`. Circleback limits each account per second and per minute
+   * (3 and 20 on the free plan) and reports whichever window is closer to running out, so
+   * the value moves between the two. Undefined until a response carries the header. A caller
+   * that knows the value from an earlier run may set it to skip the call spacing.
    */
   rateLimit: number | undefined;
 
@@ -237,7 +238,10 @@ export class HttpClient {
     return this.#requestUrl({ url, headers: { Authorization: `Bearer ${this.#key}` }, throw: false });
   }
 
-  /** Learns the plan's limit, and when the limit is used up, when it resets. */
+  /**
+   * Learns the limit, and when it is used up, when it resets. `RateLimit-Reset` is the
+   * number of seconds until the reported window ends.
+   */
   #recordRateHeaders(headers: Record<string, string>): void {
     const limit = parseLimit(getHeader(headers, "RateLimit-Limit"));
     if (limit !== undefined) this.rateLimit = limit;
