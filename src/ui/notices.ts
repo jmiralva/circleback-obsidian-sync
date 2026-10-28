@@ -23,9 +23,15 @@ export const NO_FULL_SYNC = "Circleback Sync: no full sync is running.";
 
 // Notices from the settings tab.
 
-/** Shown when the settings tab closes after a setting that shapes the notes was changed. */
+/** Shown, with a "Run full sync" button, when the settings tab closes after a setting that shapes the text of the notes was changed. */
 export const OUTPUT_CHANGE_NOTICE =
-  "Circleback Sync: these changes apply to meetings synced from now on. Run a full sync to update existing notes.";
+  "Circleback Sync: these changes apply to meetings synced from now on. Run a full sync to update the text of existing notes.";
+/** Added to the notice above when a folder or file name setting was changed too: a full sync never moves or renames a note. */
+export const PLACEMENT_NOTICE_SUFFIX = " Existing notes keep their folders and file names.";
+export const OUTPUT_AND_PLACEMENT_CHANGE_NOTICE = OUTPUT_CHANGE_NOTICE + PLACEMENT_NOTICE_SUFFIX;
+/** Shown, with no button, when only folder or file name settings were changed: there is nothing for a full sync to do. */
+export const PLACEMENT_CHANGE_NOTICE =
+  "Circleback Sync: new notes will use the new folders and file names. Existing notes stay where they are.";
 export const SETTINGS_NOT_SAVED = "Circleback Sync: could not save the settings.";
 export const LOGS_COPIED = "Circleback Sync: logs copied. API keys are removed from them.";
 export const LOGS_NOT_COPIED = "Circleback Sync: could not copy the logs.";

@@ -1,4 +1,4 @@
-// Saves the edits the settings tab makes, and works out at close which of them need a full sync.
+// Saves the edits the settings tab makes, and works out at close which of them the user should be told about.
 // It is kept apart from the tab, which needs a DOM, so that the part that can lose a user's edit
 // or show a wrong notice can be tested with fake timers.
 //
@@ -12,10 +12,20 @@
 // from the old settings and undo it.
 import type { CirclebackSyncSettings } from "../settings/types";
 import { logger } from "../util/logger";
-import { changedOutputSettings } from "./outputSettings";
+import { OUTPUT_SETTINGS, changedOutputSettings, changedPlacementSettings } from "./outputSettings";
 
 /** An edit: the settings it is given, changed. It must return new settings, not change the ones it got. */
 export type Edit = (settings: CirclebackSyncSettings) => CirclebackSyncSettings;
+
+/**
+ * What changed between opening and closing the tab, by the kind of setting: `output` settings
+ * shape the text of existing notes (a full sync updates it), `placement` settings only decide
+ * where new notes go. Never both empty.
+ */
+export interface SettingsChange {
+  output: string[];
+  placement: string[];
+}
 
 /** What the saver needs from a debounced function. Obsidian's `Debouncer` has both. */
 export interface Debounced {
@@ -31,8 +41,8 @@ export interface SettingsSaverDeps {
   debounce: (callback: () => void) => Debounced;
   /** A save failed. The saver has already logged why; this is for telling the user. */
   onSaveError: () => void;
-  /** The tab closed after a setting that shapes the notes was changed. Called at most once per close. */
-  onOutputChanged: (changed: string[]) => void;
+  /** The tab closed after a setting that shapes the notes or decides where they go was changed. Called at most once per close. */
+  onSettingsChanged: (change: SettingsChange) => void;
 }
 
 export class SettingsSaver {
@@ -70,8 +80,8 @@ export class SettingsSaver {
   }
 
   /**
-   * The tab closed. Saves what is waiting, then, once every save is done, tells `onOutputChanged`
-   * which output settings differ from when the tab opened. Resolves when that is finished.
+   * The tab closed. Saves what is waiting, then, once every save is done, tells `onSettingsChanged`
+   * which output and placement settings differ from when the tab opened. Resolves when that is finished.
    */
   close(): Promise<void> {
     const before = this.opened;
@@ -80,23 +90,32 @@ export class SettingsSaver {
     this.saveQueued.run();
     return this.saving.then(() => {
       if (before === null) return;
-      const changed = changedOutputSettings(before, this.deps.store.current);
-      if (changed.length === 0) return;
+      const { current } = this.deps.store;
+      const change: SettingsChange = {
+        output: changedOutputSettings(before, current),
+        placement: changedPlacementSettings(before, current),
+      };
+      if (change.output.length === 0 && change.placement.length === 0) return;
       try {
-        this.deps.onOutputChanged(changed);
+        this.deps.onSettingsChanged(change);
       } catch (error) {
-        logger.error("Could not tell the user which settings need a full sync.", error);
+        logger.error("Could not tell the user what the changed settings do to existing notes.", error);
       }
     });
   }
 
   /**
-   * Counts the changes so far as dealt with: a full sync is about to rewrite the notes, so closing
-   * the tab should not offer one again for them. Does nothing while the tab is closed.
+   * Counts the changes so far to the output settings as dealt with: a full sync is about to
+   * rewrite the notes, so closing the tab should not offer one again for them. Changes to the
+   * placement settings stay counted, since a full sync never moves or renames a note and the
+   * user still needs to hear that. Does nothing while the tab is closed.
    */
   async rebase(): Promise<void> {
     await this.flush();
-    if (this.opened !== null) this.opened = { ...this.deps.store.current };
+    if (this.opened === null) return;
+    const { current } = this.deps.store;
+    const output = Object.fromEntries(OUTPUT_SETTINGS.map((key) => [key, current[key]])) as Partial<CirclebackSyncSettings>;
+    this.opened = { ...this.opened, ...output };
   }
 
   /** Queues an edit for a text or number field. */

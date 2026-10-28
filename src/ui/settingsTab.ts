@@ -17,13 +17,15 @@ import {
   KEY_NOT_SAVED,
   LOGS_COPIED,
   LOGS_NOT_COPIED,
+  OUTPUT_AND_PLACEMENT_CHANGE_NOTICE,
   OUTPUT_CHANGE_NOTICE,
+  PLACEMENT_CHANGE_NOTICE,
   SETTINGS_NOT_SAVED,
 } from "./notices";
 import { RemoveAccountModal } from "./removeAccountModal";
 import { addAccount, parseWholeNumber, removeAccount, trimFolder, updateAccount, withField } from "./settingsEdits";
 import { SettingsSaver } from "./settingsSaver";
-import type { Edit } from "./settingsSaver";
+import type { Edit, SettingsChange } from "./settingsSaver";
 import {
   REMOVE_ACCOUNT_TEXT,
   fullSyncButtonText,
@@ -48,7 +50,7 @@ const SAVE_DELAY_MS = 500;
 const NO_DUPLICATES = "No duplicates found in the last sync on this device.";
 // Kept as constants, not inline, so the sentence case check does not lowercase the brand name.
 const SELF_NAME_DESC =
-  "Your name as it should appear in transcripts. Leave empty to use the name Circleback has for you.";
+  "The speaker name that is you in transcripts. The plugin looks for it among the speakers to recognize your lines, and labels them as Self label says. It wins over the name found in your meetings, which is used when this is empty.";
 
 const NOTE_VARIABLES = "{title}, {date} (2026-10-27), {time} (13-45-00), {year}, {month}, {day} and {quarter} (Q4)";
 // A folder has no title to use.
@@ -92,7 +94,7 @@ export class CirclebackSettingTab extends PluginSettingTab {
       onSaveError: () => {
         new Notice(SETTINGS_NOT_SAVED);
       },
-      onOutputChanged: () => this.showOutputNotice(),
+      onSettingsChanged: (change) => this.showChangeNotice(change),
     });
   }
 
@@ -284,7 +286,7 @@ export class CirclebackSettingTab extends PluginSettingTab {
     );
     this.addToggle(
       el, settings, "showSyncNotifications", "Show sync notifications",
-      "Show a notice when an automatic sync updates notes. Problems are always shown.",
+      "Show a notice when an automatic sync updates notes or cannot write some. An account that stops syncing or starts again, and any sync you start yourself, always get a notice.",
     );
   }
 
@@ -470,7 +472,7 @@ export class CirclebackSettingTab extends PluginSettingTab {
       });
     this.addToggle(
       el, settings, "debugLogging", "Debug logging",
-      "Also print the plugin's log to the developer console. Its lines are at the Verbose level, so set the console to show Verbose. The log is kept in memory either way, for Copy logs.",
+      "Also print the plugin's log to the developer console. Detail lines are at the Verbose level, so set the console to show Verbose to see them; warnings and errors show at the default levels. The log is kept in memory either way, for Copy logs.",
     );
     new Setting(el)
       .setName("Copy logs")
@@ -628,10 +630,20 @@ export class CirclebackSettingTab extends PluginSettingTab {
     }
   }
 
-  /** A notice that stays until it is dismissed or its button is used. */
-  private showOutputNotice(): void {
+  /**
+   * What the settings changed in this visit mean for existing notes. A change to what notes say
+   * gets a notice that stays until it is dismissed or its button is used, since a full sync is
+   * what updates the older notes. A change only to folders and file names has nothing to offer: no
+   * sync moves or renames an existing note, so the notice is plain and goes by itself.
+   */
+  private showChangeNotice(change: SettingsChange): void {
+    if (change.output.length === 0) {
+      new Notice(PLACEMENT_CHANGE_NOTICE);
+      return;
+    }
+    const text = change.placement.length > 0 ? OUTPUT_AND_PLACEMENT_CHANGE_NOTICE : OUTPUT_CHANGE_NOTICE;
     const fragment = createFragment((content) => {
-      content.createDiv({ text: OUTPUT_CHANGE_NOTICE });
+      content.createDiv({ text });
       const button = content.createEl("button", { text: "Run full sync", cls: "mod-cta circleback-sync-notice-button" });
       button.addEventListener("click", () => {
         void this.startFullSync();

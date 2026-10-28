@@ -30,18 +30,18 @@ function setup(): {
   store: FakeStore;
   saver: SettingsSaver;
   onSaveError: jest.Mock;
-  onOutputChanged: jest.Mock;
+  onSettingsChanged: jest.Mock;
 } {
   const store = new FakeStore();
   const onSaveError = jest.fn();
-  const onOutputChanged = jest.fn();
+  const onSettingsChanged = jest.fn();
   const saver = new SettingsSaver({
     store,
     debounce: (callback) => debounce(callback, DELAY, true),
     onSaveError,
-    onOutputChanged,
+    onSettingsChanged,
   });
-  return { store, saver, onSaveError, onOutputChanged };
+  return { store, saver, onSaveError, onSettingsChanged };
 }
 
 function set<K extends keyof CirclebackSyncSettings>(key: K, value: CirclebackSyncSettings[K]): Edit {
@@ -168,19 +168,19 @@ describe("flush", () => {
 
 describe("closing", () => {
   it("saves the waiting text edit before it compares, and reports what changed", async () => {
-    const { store, saver, onOutputChanged } = setup();
+    const { store, saver, onSettingsChanged } = setup();
     saver.open();
 
     saver.later(set("filenamePattern", "{date}"));
     await saver.close();
 
     expect(store.current.filenamePattern).toBe("{date}");
-    expect(onOutputChanged).toHaveBeenCalledTimes(1);
-    expect(onOutputChanged).toHaveBeenCalledWith(["filenamePattern"]);
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: [], placement: ["filenamePattern"] });
   });
 
   it("waits for a save that is still running", async () => {
-    const { store, saver, onOutputChanged } = setup();
+    const { store, saver, onSettingsChanged } = setup();
     store.delayMs = 100;
     saver.open();
     void saver.commit(set("saveAs", "sections"));
@@ -189,11 +189,11 @@ describe("closing", () => {
     await jest.advanceTimersByTimeAsync(100);
     await closed;
 
-    expect(onOutputChanged).toHaveBeenCalledWith(["saveAs"]);
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["saveAs"], placement: [] });
   });
 
-  it("reports once for a whole session of edits, in the order of the output settings", async () => {
-    const { saver, onOutputChanged } = setup();
+  it("reports once for a whole session of edits, each kind in the order of its list", async () => {
+    const { saver, onSettingsChanged } = setup();
     saver.open();
 
     await saver.commit(set("selfLabel", "name"));
@@ -203,23 +203,51 @@ describe("closing", () => {
     await saver.commit(set("includeInsights", false));
     await saver.close();
 
-    expect(onOutputChanged).toHaveBeenCalledTimes(1);
-    expect(onOutputChanged).toHaveBeenCalledWith(["syncTranscripts", "includeInsights", "filenamePattern", "selfLabel"]);
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+    expect(onSettingsChanged).toHaveBeenCalledWith({
+      output: ["syncTranscripts", "includeInsights", "selfLabel"],
+      placement: ["filenamePattern"],
+    });
+  });
+
+  it("reports a change to folders or file names on its own, with no output settings", async () => {
+    const { saver, onSettingsChanged } = setup();
+    saver.open();
+
+    await saver.commit(set("baseFolderType", "daily-notes"));
+    saver.later(set("customTranscriptBaseFolder", "Elsewhere"));
+    await saver.close();
+
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+    expect(onSettingsChanged).toHaveBeenCalledWith({
+      output: [],
+      placement: ["baseFolderType", "customTranscriptBaseFolder"],
+    });
+  });
+
+  it("reports an output change on its own, with no placement settings", async () => {
+    const { saver, onSettingsChanged } = setup();
+    saver.open();
+
+    await saver.commit(set("includePrivateNotes", true));
+    await saver.close();
+
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["includePrivateNotes"], placement: [] });
   });
 
   it("says nothing when only settings that do not shape the notes changed", async () => {
-    const { saver, onOutputChanged } = setup();
+    const { saver, onSettingsChanged } = setup();
     saver.open();
 
     await saver.commit(set("showSyncNotifications", false));
     saver.later(set("syncIntervalMinutes", 60));
     await saver.close();
 
-    expect(onOutputChanged).not.toHaveBeenCalled();
+    expect(onSettingsChanged).not.toHaveBeenCalled();
   });
 
   it("says nothing when an edit was reverted", async () => {
-    const { saver, onOutputChanged } = setup();
+    const { saver, onSettingsChanged } = setup();
     saver.open();
 
     await saver.commit(set("includeInsights", false));
@@ -229,15 +257,15 @@ describe("closing", () => {
     saver.later(set("filenamePattern", DEFAULT_SETTINGS.filenamePattern));
     await saver.close();
 
-    expect(onOutputChanged).not.toHaveBeenCalled();
+    expect(onSettingsChanged).not.toHaveBeenCalled();
   });
 
   it("does not report the same changes again the next time", async () => {
-    const { saver, onOutputChanged } = setup();
+    const { saver, onSettingsChanged } = setup();
     saver.open();
     await saver.commit(set("saveAs", "sections"));
     await saver.close();
-    expect(onOutputChanged).toHaveBeenCalledTimes(1);
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
 
     // The tab is opened and closed again with no edits.
     saver.open();
@@ -245,11 +273,11 @@ describe("closing", () => {
     // And a second close with no open in between.
     await saver.close();
 
-    expect(onOutputChanged).toHaveBeenCalledTimes(1);
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
   });
 
   it("starts each session from the settings as they are when it opens", async () => {
-    const { saver, onOutputChanged } = setup();
+    const { saver, onSettingsChanged } = setup();
     saver.open();
     await saver.commit(set("saveAs", "sections"));
     await saver.close();
@@ -258,23 +286,23 @@ describe("closing", () => {
     await saver.commit(set("includeInsights", false));
     await saver.close();
 
-    expect(onOutputChanged).toHaveBeenCalledTimes(2);
-    expect(onOutputChanged).toHaveBeenLastCalledWith(["includeInsights"]);
+    expect(onSettingsChanged).toHaveBeenCalledTimes(2);
+    expect(onSettingsChanged).toHaveBeenLastCalledWith({ output: ["includeInsights"], placement: [] });
   });
 
   it("flushes even if the tab was never opened, and reports nothing", async () => {
-    const { store, saver, onOutputChanged } = setup();
+    const { store, saver, onSettingsChanged } = setup();
     saver.later(set("filenamePattern", "x"));
 
     await saver.close();
 
     expect(store.current.filenamePattern).toBe("x");
-    expect(onOutputChanged).not.toHaveBeenCalled();
+    expect(onSettingsChanged).not.toHaveBeenCalled();
   });
 
   it("logs and carries on if the notice cannot be shown", async () => {
-    const { saver, onOutputChanged } = setup();
-    onOutputChanged.mockImplementation(() => {
+    const { saver, onSettingsChanged } = setup();
+    onSettingsChanged.mockImplementation(() => {
       throw new Error("no notice");
     });
     saver.open();
@@ -297,7 +325,7 @@ describe("opening", () => {
   });
 
   it("does not start over when it is opened again during the same session", async () => {
-    const { saver, onOutputChanged } = setup();
+    const { saver, onSettingsChanged } = setup();
     saver.open();
     await saver.commit(set("saveAs", "sections"));
 
@@ -305,7 +333,7 @@ describe("opening", () => {
     saver.open();
     await saver.close();
 
-    expect(onOutputChanged).toHaveBeenCalledWith(["saveAs"]);
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["saveAs"], placement: [] });
   });
 
   it("counts a new session at each open and each close, so late results can be told apart", () => {
@@ -325,18 +353,18 @@ describe("opening", () => {
 
 describe("rebase", () => {
   it("makes the changes so far count as already dealt with", async () => {
-    const { saver, onOutputChanged } = setup();
+    const { saver, onSettingsChanged } = setup();
     saver.open();
     await saver.commit(set("saveAs", "sections"));
 
     await saver.rebase();
     await saver.close();
 
-    expect(onOutputChanged).not.toHaveBeenCalled();
+    expect(onSettingsChanged).not.toHaveBeenCalled();
   });
 
   it("still reports the changes made after it", async () => {
-    const { saver, onOutputChanged } = setup();
+    const { saver, onSettingsChanged } = setup();
     saver.open();
     await saver.commit(set("saveAs", "sections"));
     await saver.rebase();
@@ -344,30 +372,43 @@ describe("rebase", () => {
     await saver.commit(set("includeInsights", false));
     await saver.close();
 
-    expect(onOutputChanged).toHaveBeenCalledTimes(1);
-    expect(onOutputChanged).toHaveBeenCalledWith(["includeInsights"]);
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["includeInsights"], placement: [] });
   });
 
   it("counts a text edit that is still waiting as made before it", async () => {
-    const { saver, onOutputChanged } = setup();
+    const { saver, onSettingsChanged } = setup();
     saver.open();
-    saver.later(set("filenamePattern", "typed"));
+    saver.later(set("saveAs", "sections"));
 
     await saver.rebase();
     await saver.close();
 
-    expect(onOutputChanged).not.toHaveBeenCalled();
+    expect(onSettingsChanged).not.toHaveBeenCalled();
+  });
+
+  it("does not count folder and file name changes as dealt with, since a full sync moves and renames nothing", async () => {
+    const { saver, onSettingsChanged } = setup();
+    saver.open();
+    await saver.commit(set("saveAs", "sections"));
+    saver.later(set("filenamePattern", "{date} {title}"));
+
+    await saver.rebase();
+    await saver.close();
+
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: [], placement: ["filenamePattern"] });
   });
 
   it("does nothing while the tab is closed", async () => {
-    const { saver, onOutputChanged } = setup();
+    const { saver, onSettingsChanged } = setup();
 
     await saver.rebase();
     saver.open();
     await saver.close();
 
     expect(saver.isOpen).toBe(false);
-    expect(onOutputChanged).not.toHaveBeenCalled();
+    expect(onSettingsChanged).not.toHaveBeenCalled();
   });
 });
 
@@ -402,7 +443,7 @@ describe("a save that fails", () => {
   });
 
   it("does not stop close() from finishing", async () => {
-    const { store, saver, onSaveError, onOutputChanged } = setup();
+    const { store, saver, onSaveError, onSettingsChanged } = setup();
     store.failNext = 1;
     saver.open();
     saver.later(set("saveAs", "sections"));
@@ -411,7 +452,7 @@ describe("a save that fails", () => {
 
     expect(onSaveError).toHaveBeenCalledTimes(1);
     // Nothing was saved, so there is nothing to tell the user about.
-    expect(onOutputChanged).not.toHaveBeenCalled();
+    expect(onSettingsChanged).not.toHaveBeenCalled();
   });
 
   it("survives an edit that throws", async () => {

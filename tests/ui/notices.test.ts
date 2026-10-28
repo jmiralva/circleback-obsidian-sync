@@ -10,7 +10,9 @@ import {
   LOGS_NOT_COPIED,
   NO_FULL_SYNC,
   NO_KEY_NOTICE,
+  OUTPUT_AND_PLACEMENT_CHANGE_NOTICE,
   OUTPUT_CHANGE_NOTICE,
+  PLACEMENT_CHANGE_NOTICE,
   SETTINGS_NOT_SAVED,
   SYNC_OFF_NOTICE,
   WAITING_FOR_VAULT,
@@ -201,7 +203,13 @@ describe("fixed notices", () => {
 
   it("have the words the settings tab tells the user", () => {
     expect(OUTPUT_CHANGE_NOTICE).toBe(
-      "Circleback Sync: these changes apply to meetings synced from now on. Run a full sync to update existing notes.",
+      "Circleback Sync: these changes apply to meetings synced from now on. Run a full sync to update the text of existing notes.",
+    );
+    expect(OUTPUT_AND_PLACEMENT_CHANGE_NOTICE).toBe(
+      "Circleback Sync: these changes apply to meetings synced from now on. Run a full sync to update the text of existing notes. Existing notes keep their folders and file names.",
+    );
+    expect(PLACEMENT_CHANGE_NOTICE).toBe(
+      "Circleback Sync: new notes will use the new folders and file names. Existing notes stay where they are.",
     );
     expect(SETTINGS_NOT_SAVED).toBe("Circleback Sync: could not save the settings.");
     expect(LOGS_COPIED).toBe("Circleback Sync: logs copied. API keys are removed from them.");
