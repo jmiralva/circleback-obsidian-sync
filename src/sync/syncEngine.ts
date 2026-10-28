@@ -76,8 +76,12 @@ export interface SyncEngineDeps {
   now: () => Date;
 }
 
-/** Transcript errors after which the account cannot go on this run. Any other skips one meeting. */
-const STOPS_ACCOUNT: readonly CirclebackErrorKind[] = ["auth", "rate-limited"];
+/**
+ * Transcript errors after which the account cannot go on this run; any other skips one meeting.
+ * `invalid-response` is one: a transcript that fails validation means Circleback changed its API,
+ * which every later transcript would hit too, and the account must show as failing.
+ */
+const STOPS_ACCOUNT: readonly CirclebackErrorKind[] = ["auth", "rate-limited", "invalid-response"];
 
 const NOTHING: RunResult = { perAccount: {}, duplicates: [] };
 
@@ -205,10 +209,11 @@ export class SyncEngine {
     for (const acc of accounts) {
       if (!acc.result.ok) continue;
       ran.add(acc);
-      // Accounts that failed this run are left out: like an account that is not connected, the
-      // meetings they own are written by an account that can see them.
+      // Every other connected account whose email is known, even one that failed this run: a
+      // forced rewrite by another account would replace the owner's copy (its private notes, its
+      // "You") and its label, and the owner would not take the note back until the meeting changed.
       const owners = eligible
-        .filter((other) => other !== acc && other.result.ok && other.ownerEmail !== "")
+        .filter((other) => other !== acc && other.ownerEmail !== "")
         .map((other) => other.ownerEmail);
       const outcome = await this.fullSyncAccount(run, acc, owners, seen, signal, () => onProgress(++done));
       if (outcome === "cancelled") {
@@ -280,8 +285,8 @@ export class SyncEngine {
 
   /**
    * Writes one meeting through the account chosen to write it, then brings its daily note up to
-   * date. Its failures are not thrown: a failed meeting is counted on the account, and an auth or
-   * rate-limit error on its transcript fails the account for the rest of the run.
+   * date. Its failures are not thrown: a failed meeting is counted on the account, and an auth,
+   * rate-limit or invalid-response error on its transcript fails the account for the rest of the run.
    */
   private async processMeeting(run: Run, acc: AccountRun, m: Meeting): Promise<void> {
     const ctx = this.writeContext(run, acc);

@@ -2,8 +2,9 @@ import { readFileSync } from "fs";
 import { join } from "path";
 import * as v from "valibot";
 import type { TFile } from "obsidian";
-import type { MeetingsPage } from "../../src/api/circlebackClient";
+import { CirclebackClient, type MeetingsPage } from "../../src/api/circlebackClient";
 import { CirclebackError, type CirclebackErrorKind } from "../../src/api/errors";
+import { HttpClient, type HttpResponse } from "../../src/api/http";
 import { MeetingListSchema, TranscriptSchema, type ConnectionInfo, type Meeting, type TranscriptSegment } from "../../src/api/schemas";
 import { KeyStore } from "../../src/secrets/keyStore";
 import { DEFAULT_SETTINGS, type AccountConfig, type CirclebackSyncSettings } from "../../src/settings/types";
@@ -117,6 +118,8 @@ interface SetupOptions {
   servers: Record<string, Script>;
   settings?: Partial<CirclebackSyncSettings>;
   files?: Record<string, string>;
+  /** By account id: a client to use instead of that account's fake (its script still gives the key). */
+  clients?: Record<string, SyncClient>;
 }
 
 interface Setup {
@@ -151,6 +154,8 @@ function setup(opts: SetupOptions): Setup {
     device,
     clientFor: (key) => {
       clientsMade.push(key);
+      const own = opts.clients?.[key.replace(/^cb_key_/, "")];
+      if (own) return own;
       const server = servers.get(key);
       if (!server) throw new Error(`no fake server for ${key}`);
       return server;
@@ -492,6 +497,46 @@ describe("SyncEngine.sync", () => {
     expect(device.account("a")).toMatchObject({ failing: true, lastError: "auth" });
   });
 
+  it("stops an account whose transcript fails validation, records invalid-response, and keeps the other accounts going", async () => {
+    // A real client over scripted responses: the transcript's shape is wrong (a Circleback schema change).
+    const raw = fixture("schema-meetings-page.json") as Array<Record<string, unknown>>;
+    const replies: Record<string, unknown> = {
+      "/oauth/test": { email: A_EMAIL },
+      "/meetings": [raw[0], { ...raw[0], id: "fixture-meeting-0009", name: "Meeting nine" }],
+      "/transcript": [{ speaker: 7, text: null, timestamp: "soon" }],
+    };
+    const requestUrl = jest.fn(async ({ url }: { url: string }): Promise<HttpResponse> => {
+      const path = Object.keys(replies).find((key) => new URL(url).pathname.endsWith(key));
+      if (path === undefined) throw new Error(`unexpected request ${url}`);
+      return { status: 200, headers: {}, text: JSON.stringify(replies[path]) };
+    });
+    const http = new HttpClient("cb_key_a", {
+      requestUrl,
+      sleep: async () => undefined,
+      setTimer: (callback, ms) => setTimeout(callback, ms),
+      clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    });
+    http.rateLimit = 300;
+    const { app, engine, device } = setup({
+      accounts: [A, B],
+      servers: { a: { email: A_EMAIL, pages: [] }, b: { email: B_EMAIL, pages: [[meeting("m3", ownedBy(B_EMAIL))]] } },
+      clients: { a: new CirclebackClient(http) },
+      settings: { syncTranscripts: true },
+    });
+
+    const result = await sync(engine);
+
+    expect(result.perAccount.a).toMatchObject({ ok: false, error: "invalid-response", written: 0 });
+    // The first transcript stopped the account: the second meeting's was never asked for.
+    expect(requestUrl.mock.calls.filter(([request]) => request.url.endsWith("/transcript"))).toHaveLength(1);
+    expect(filesOf(app, "fixture-meeting-0001")).toEqual([]);
+    expect(filesOf(app, "fixture-meeting-0009")).toEqual([]);
+    expect(device.account("a")).toMatchObject({ failing: true, lastError: "invalid-response" });
+    expect(device.account("a").lastSuccessAt).toBeUndefined();
+    expect(result.perAccount.b).toMatchObject({ ok: true, written: 1 });
+    expect(app.exists(notePath("m3"))).toBe(true);
+  });
+
   it("skips only the meeting whose transcript fails another way, and tries it again next sync", async () => {
     const { app, engine, server, device } = setup({
       servers: { a: { email: A_EMAIL, pages: [[meeting("m1"), meeting("m2")]], transcriptErrors: { m1: failure("server") } } },
@@ -817,6 +862,32 @@ describe("SyncEngine.fullSync", () => {
     expect(server("a").transcriptCalls).toEqual(["m1"]);
     expect(result.perAccount.b).toMatchObject({ written: 1 });
     expect(result.perAccount.a).toMatchObject({ written: 1 });
+  });
+
+  it("leaves a meeting to its owner's account even when that account fails this run", async () => {
+    const { app, engine, server, device } = setup({
+      accounts: [A, B],
+      servers: {
+        a: { email: A_EMAIL, pages: [[meeting("m1")]] },
+        b: { email: B_EMAIL, pages: [[meeting("m1", { privateNotes: "B's own notes" })]] },
+      },
+      settings: { syncTranscripts: true },
+    });
+    await sync(engine);
+    expect(frontmatter(app, notePath("m1")).circleback_account).toBe("Work");
+    const before = app.fileText(notePath("m1"));
+    server("b").transcriptCalls.length = 0;
+
+    // A's email is cached, so no connection test runs; A fails on its first page instead.
+    expect(device.account("a").ownerEmail).toBe(A_EMAIL);
+    server("a").script.pageErrors = { 0: failure("auth") };
+    const result = await fullSync(engine);
+
+    expect(result.perAccount.a).toMatchObject({ ok: false, error: "auth" });
+    expect(result.perAccount.b).toMatchObject({ ok: true, written: 0 });
+    expect(frontmatter(app, notePath("m1")).circleback_account).toBe("Work");
+    expect(app.fileText(notePath("m1"))).toBe(before);
+    expect(server("b").transcriptCalls).toEqual([]);
   });
 
   it("ends a failing account's full sync and goes on with the next account", async () => {
