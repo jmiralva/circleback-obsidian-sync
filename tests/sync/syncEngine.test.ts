@@ -530,6 +530,49 @@ describe("SyncEngine.sync", () => {
     expect(app.exists(notePath("m3"))).toBe(true);
   });
 
+  it("writes a meeting whose transcript is missing (404) without one, keeps the account ok, and asks again next sync", async () => {
+    // A real client over scripted responses: Circleback answers 404 for a meeting with no transcript.
+    const raw = fixture("schema-meetings-page.json") as Array<Record<string, unknown>>;
+    const replies: Record<string, { status: number; body: unknown }> = {
+      "/oauth/test": { status: 200, body: { email: A_EMAIL } },
+      "/meetings": { status: 200, body: [{ ...raw[0], id: "m404", name: "Meeting m404" }] },
+      "/transcript": { status: 404, body: { error: "Transcript not found for meeting m404." } },
+    };
+    const requestUrl = jest.fn(async ({ url }: { url: string }): Promise<HttpResponse> => {
+      const path = Object.keys(replies).find((key) => new URL(url).pathname.endsWith(key));
+      if (path === undefined) throw new Error(`unexpected request ${url}`);
+      return { status: replies[path].status, headers: {}, text: JSON.stringify(replies[path].body) };
+    });
+    const http = new HttpClient("cb_key_a", {
+      requestUrl,
+      sleep: async () => undefined,
+      setTimer: (callback, ms) => setTimeout(callback, ms),
+      clearTimer: (handle) => clearTimeout(handle as ReturnType<typeof setTimeout>),
+    });
+    http.rateLimit = 300;
+    const { app, engine, device } = setup({
+      servers: { a: { email: A_EMAIL, pages: [] } },
+      clients: { a: new CirclebackClient(http) },
+      settings: { syncTranscripts: true },
+    });
+    const transcriptCalls = (): number => requestUrl.mock.calls.filter(([request]) => request.url.endsWith("/transcript")).length;
+
+    const first = await sync(engine);
+    expect(first.perAccount.a).toMatchObject({ ok: true, written: 1, failed: 0 });
+    expect(app.exists(notePath("m404"))).toBe(true);
+    expect(app.exists(transcriptPath("m404"))).toBe(false);
+    expect(device.account("a")).toMatchObject({ failing: false });
+    expect(device.account("a").forbiddenTranscripts).toBeUndefined();
+    expect(transcriptCalls()).toBe(1);
+
+    // The transcript arrives: the next sync asks again and writes it.
+    replies["/transcript"] = { status: 200, body: fixture("schema-transcript.json") };
+    const second = await sync(engine);
+    expect(second.perAccount.a).toMatchObject({ ok: true, failed: 0 });
+    expect(transcriptCalls()).toBe(2);
+    expect(app.exists(transcriptPath("m404"))).toBe(true);
+  });
+
   it("skips only the meeting whose transcript fails another way, and tries it again next sync", async () => {
     const { app, engine, server, device } = setup({
       servers: { a: { email: A_EMAIL, pages: [[meeting("m1"), meeting("m2")]], transcriptErrors: { m1: failure("server") } } },

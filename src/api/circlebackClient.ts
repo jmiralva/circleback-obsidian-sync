@@ -5,6 +5,7 @@
 // one bad meeting fails its whole page, so a Circleback schema change shows up as an
 // error for the account instead of half-written notes.
 import * as v from "valibot";
+import { logger } from "../util/logger";
 import { FINISHED_STATUSES, SITE_ORIGIN, serializeStatuses } from "./constants";
 import { CirclebackError } from "./errors";
 import { HttpClient, getHeader } from "./http";
@@ -67,7 +68,8 @@ export class CirclebackClient {
 
   /**
    * A meeting's transcript, or null when the key may see the meeting but not its
-   * transcript (403). Every other failure propagates.
+   * transcript (403). A meeting with no transcript (404) gets an empty one, which the sync
+   * treats as not ready yet and asks for again next run. Every other failure propagates.
    */
   async getTranscript(meetingId: string): Promise<TranscriptSegment[] | null> {
     const endpoint = `/meeting/${encodeURIComponent(meetingId)}/transcript`;
@@ -76,6 +78,13 @@ export class CirclebackClient {
       ({ body } = await this.#http.getJson(endpoint));
     } catch (error) {
       if (error instanceof CirclebackError && error.kind === "forbidden") return null;
+      // Circleback answers 404 ("Transcript not found for meeting ...") for a meeting that was
+      // never recorded or is not processed yet. That is no transcript, not a broken API, so it
+      // must not fail the account.
+      if (error instanceof CirclebackError && error.status === 404) {
+        logger.debug(`No transcript yet for meeting ${meetingId} (HTTP 404); treating it as empty.`);
+        return [];
+      }
       throw error;
     }
     // The id is left out of the message; any meeting's transcript has this shape.

@@ -386,13 +386,29 @@ describe("CirclebackClient.getTranscript", () => {
     expect(await client.getTranscript("m1")).toBeNull();
   });
 
+  it("returns an empty transcript on 404, Circleback's answer for a meeting with no transcript", async () => {
+    // The body the real API sends for a meeting that was never recorded.
+    const { client } = setup({ status: 404, body: { error: "Transcript not found for meeting m1." } });
+    expect(await client.getTranscript("m1")).toEqual([]);
+  });
+
   it.each([
+    [400, "invalid-response"],
     [401, "auth"],
-    [404, "invalid-response"],
+    [410, "invalid-response"],
     [503, "server"],
   ])("lets a %i through as %s", async (status, kind) => {
     const { client } = setup({ status });
     expect((await failure(client.getTranscript("m1"))).kind).toBe(kind);
+  });
+
+  it("still fails on a 404 from the other endpoints", async () => {
+    const list = setup({ status: 404, body: { error: "Not found." } });
+    const listError = await failure(list.client.listMeetingsPage({ ownership: "Mine" }));
+    expect(listError).toMatchObject({ kind: "invalid-response", status: 404 });
+
+    const connection = setup({ status: 404, body: { error: "Not found." } });
+    expect(await failure(connection.client.testConnection())).toMatchObject({ kind: "invalid-response", status: 404 });
   });
 
   it("rejects an invalid transcript with invalid-response, naming the endpoint but not the text", async () => {
