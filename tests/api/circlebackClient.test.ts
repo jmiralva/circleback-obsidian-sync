@@ -432,3 +432,17 @@ describe("CirclebackClient.testConnection", () => {
     expect((await failure(client.testConnection())).kind).toBe("auth");
   });
 });
+
+describe("CirclebackClient.rateLimit", () => {
+  it("is the account's limit once a response has given it, and undefined before", async () => {
+    const requestUrl = jest.fn(async (): Promise<HttpResponse> => ({
+      status: 200,
+      headers: { "RateLimit-Limit": "20" },
+      text: JSON.stringify({ email: "a@example.com" }),
+    }));
+    const client = new CirclebackClient(new HttpClient(KEY, { requestUrl, sleep: async () => undefined, ...timers }));
+    expect(client.rateLimit).toBeUndefined();
+    await client.testConnection();
+    expect(client.rateLimit).toBe(20);
+  });
+});

@@ -617,6 +617,16 @@ describe("DailyNotes.writeSection", () => {
     expect(process).toHaveBeenCalledTimes(1);
   });
 
+  it("says whether it changed the daily note", async () => {
+    const fake = app({ [DAY_26]: "# Day\n" });
+    const dailyNotes = new DailyNotes(fake);
+    expect(await dailyNotes.writeSection(meeting(), "body", settings(), NOW)).toBe(true);
+    expect(await dailyNotes.writeSection(meeting(), "body", settings(), NOW)).toBe(false);
+    expect(await dailyNotes.writeSection(meeting(), "new body", settings(), NOW)).toBe(true);
+    expect(await dailyNotes.writeSection(meeting(), "body", settings({ dailyNoteSectionHeading: "" }), NOW)).toBe(false);
+    expect(await dailyNotes.writeSection(at("2026-10-20T15:00:00.000Z"), "body", settings({ createMissingDailyNotes: "never" }), NOW)).toBe(false);
+  });
+
   it("does not need link-from-daily-notes to be on", async () => {
     const fake = app();
     await new DailyNotes(fake).writeSection(meeting(), "body", settings({ linkFromDailyNotes: false }), NOW);

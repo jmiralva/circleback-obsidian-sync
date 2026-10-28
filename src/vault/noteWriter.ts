@@ -102,6 +102,14 @@ export class NoteWriter {
   }
 
   /**
+   * The files the meeting has in the vault now, as `write` reports them when there is nothing to
+   * write. Writes nothing. The engine uses it to link a meeting that `isCurrent` let it skip.
+   */
+  existing(m: Meeting, ctx: WriteContext): WriteResult {
+    return this.unchanged(m, ctx);
+  }
+
+  /**
    * Writes a meeting: its transcript file first (when `transcript` is not null and transcripts
    * are separate files), then its note. A null transcript (turned off, or not allowed) means
    * none is expected, and an existing transcript file is kept and still linked.

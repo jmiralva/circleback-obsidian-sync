@@ -251,19 +251,22 @@ export class DailyNotes {
    * started (local time), between its markers. Only text between the meeting's markers is replaced.
    * A missing note for that day is created only as `createMissingDailyNotes` allows. A meeting whose
    * start moved to another day is not moved: its old block stays where it is. A failure is thrown.
+   *
+   * Resolves to whether the daily note changed: false when the block was already there as it is,
+   * and when nothing could be written (no heading set, no usable start, no note and none created).
    */
-  async writeSection(m: Meeting, block: string, s: CirclebackSyncSettings, now: Moment): Promise<void> {
+  async writeSection(m: Meeting, block: string, s: CirclebackSyncSettings, now: Moment): Promise<boolean> {
     const title = meetingTitle(m);
     if (normalizeHeading(s.dailyNoteSectionHeading) === null) {
       logger.warn(`Not writing "${title}" into the daily note: the daily note section heading setting is empty.`);
-      return;
+      return false;
     }
     const start = this.startOf(m, title);
-    if (start === null) return;
+    if (start === null) return false;
 
     const file = await getDailyNote(this.app, start, shouldCreate(s.createMissingDailyNotes, start, now), now);
-    if (file === null) return;
-    await this.update(file, (text) => upsertMeetingBlock(text, s.dailyNoteSectionHeading, m.id, title, block));
+    if (file === null) return false;
+    return this.update(file, (text) => upsertMeetingBlock(text, s.dailyNoteSectionHeading, m.id, title, block));
   }
 
   private startOf(m: Meeting, title: string): Moment | null {
@@ -294,10 +297,11 @@ export class DailyNotes {
     };
   }
 
-  /** Reads the file and writes it back through `vault.process`, only when the new text differs. */
-  private async update(file: TFile, transform: (text: string) => string): Promise<void> {
+  /** Reads the file and writes it back through `vault.process`, only when the new text differs. Says whether it wrote. */
+  private async update(file: TFile, transform: (text: string) => string): Promise<boolean> {
     const current = await this.app.vault.read(file);
-    if (transform(current) === current) return;
+    if (transform(current) === current) return false;
     await this.app.vault.process(file, transform);
+    return true;
   }
 }

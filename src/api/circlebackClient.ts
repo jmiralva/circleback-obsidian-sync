@@ -24,6 +24,11 @@ export class CirclebackClient {
     this.#http = http;
   }
 
+  /** The account's requests per minute once a response has said (see `HttpClient.rateLimit`), else undefined. */
+  get rateLimit(): number | undefined {
+    return this.#http.rateLimit;
+  }
+
   /** Checks the key. The response carries the account's email, which labels the account. */
   async testConnection(): Promise<ConnectionInfo> {
     const { body } = await this.#http.getJson("/oauth/test");

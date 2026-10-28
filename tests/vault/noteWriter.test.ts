@@ -491,6 +491,22 @@ describe("NoteWriter.isCurrent", () => {
   });
 });
 
+describe("NoteWriter.existing", () => {
+  it("gives the meeting's files as they are, and writes nothing", async () => {
+    const { app, writer } = await setup();
+    expect(writer.existing(ONE, context())).toEqual({ note: null, transcript: null, oldStart: null, changed: false });
+
+    await writer.write(ONE, SEGMENTS, context());
+    const spies = watchWrites(app);
+    const result = writer.existing(edited(), context());
+
+    expect(result.note?.path).toBe(NOTE);
+    expect(result.transcript?.path).toBe(TRANSCRIPT);
+    expect(result.changed).toBe(false);
+    for (const spy of spies) expect(spy).not.toHaveBeenCalled();
+  });
+});
+
 describe("NoteWriter in sections mode", () => {
   const sections = { saveAs: "sections" as const };
 
