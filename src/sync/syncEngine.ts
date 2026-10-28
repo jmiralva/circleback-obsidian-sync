@@ -44,6 +44,13 @@ export type SyncClient = Pick<CirclebackClient, "testConnection" | "listMeetings
  */
 export type AccountErrorKind = CirclebackErrorKind | "unexpected";
 
+/**
+ * How a full sync is told to stop early. `cancelled` is the user's choice: the sync forgets where
+ * it was. `stopped` is for Obsidian closing: it stops at the same places, but keeps where it was,
+ * as if the app had quit, so the next full sync resumes. `cancelled` wins when both are set.
+ */
+export type FullSyncSignal = { cancelled: boolean; stopped?: boolean };
+
 export type AccountResult = {
   /** False when the account failed this run; `error` says why. */
   ok: boolean;
@@ -126,10 +133,11 @@ export class SyncEngine {
   /**
    * Rewrites every meeting of every account, the whole history, page by page. `onProgress` gets
    * the number of meetings done so far after each one. Setting `signal.cancelled` stops it at the
-   * next meeting and forgets where it was; if Obsidian closes instead, the next full sync resumes.
+   * next meeting and forgets where it was; setting `signal.stopped` stops it there too but keeps
+   * where it was, as if Obsidian had closed, so the next full sync resumes.
    * `"busy"` when another sync is running.
    */
-  fullSync(onProgress: (done: number) => void, signal: { cancelled: boolean }): Promise<RunResult | "busy"> {
+  fullSync(onProgress: (done: number) => void, signal: FullSyncSignal): Promise<RunResult | "busy"> {
     return this.lock.run(() => this.runFullSync(onProgress, signal));
   }
 
@@ -176,7 +184,7 @@ export class SyncEngine {
     }
   }
 
-  private async runFullSync(onProgress: (done: number) => void, signal: { cancelled: boolean }): Promise<RunResult> {
+  private async runFullSync(onProgress: (done: number) => void, signal: FullSyncSignal): Promise<RunResult> {
     const settings = this.deps.settings();
     const eligible = this.eligibleAccounts(settings);
     if (eligible.length === 0) return NOTHING;
@@ -221,6 +229,8 @@ export class SyncEngine {
         for (const other of accounts) this.endFullSync(other);
         break;
       }
+      // Obsidian is closing: every account keeps its mark and cursor, so the next full sync resumes.
+      if (outcome === "stopped") break;
     }
     return this.finish(
       run,
@@ -241,14 +251,15 @@ export class SyncEngine {
     acc: AccountRun,
     owners: string[],
     seen: Set<string>,
-    signal: { cancelled: boolean },
+    signal: FullSyncSignal,
     progress: () => void,
-  ): Promise<"done" | "cancelled" | "failed"> {
+  ): Promise<"done" | "cancelled" | "stopped" | "failed"> {
     const { device } = this.deps;
     const followed = new Set<string>();
     let cursorUrl = device.account(acc.config.id).fullSyncCursor ?? undefined;
     for (;;) {
-      if (signal.cancelled) return "cancelled";
+      const pageHalt = halted(signal);
+      if (pageHalt !== null) return pageHalt;
       let page: MeetingsPage;
       let next: string | null;
       try {
@@ -262,7 +273,8 @@ export class SyncEngine {
 
       this.learnOwnerName(acc, page.meetings);
       for (const m of page.meetings) {
-        if (signal.cancelled) return "cancelled";
+        const meetingHalt = halted(signal);
+        if (meetingHalt !== null) return meetingHalt;
         if (seen.has(m.id) || !keepMeeting(m, run.settings, null)) continue;
         if (owners.some((email) => ownsMeeting(m, email))) continue;
         seen.add(m.id);
@@ -497,6 +509,12 @@ export class SyncEngine {
     }
     return { perAccount, duplicates };
   }
+}
+
+/** Why a full sync has to stop now, if it does. The user's cancel wins over Obsidian closing. */
+function halted(signal: FullSyncSignal): "cancelled" | "stopped" | null {
+  if (signal.cancelled) return "cancelled";
+  return signal.stopped === true ? "stopped" : null;
 }
 
 function ownershipFor(settings: CirclebackSyncSettings): "Mine" | "All" {

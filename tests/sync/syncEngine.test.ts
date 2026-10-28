@@ -10,7 +10,7 @@ import { KeyStore } from "../../src/secrets/keyStore";
 import { DEFAULT_SETTINGS, type AccountConfig, type CirclebackSyncSettings } from "../../src/settings/types";
 import { DeviceState } from "../../src/state/deviceState";
 import { SyncLock } from "../../src/sync/lock";
-import { SyncEngine, type RunResult, type SyncClient } from "../../src/sync/syncEngine";
+import { SyncEngine, type FullSyncSignal, type RunResult, type SyncClient } from "../../src/sync/syncEngine";
 import { createFakeApp, type FakeApp } from "../harness/fakeApp";
 import { pluginFile } from "../vault/meetingFile";
 
@@ -179,7 +179,7 @@ async function sync(engine: SyncEngine): Promise<RunResult> {
 async function fullSync(
   engine: SyncEngine,
   onProgress: (done: number) => void = () => undefined,
-  signal: { cancelled: boolean } = { cancelled: false },
+  signal: FullSyncSignal = { cancelled: false },
 ): Promise<RunResult> {
   const result = await engine.fullSync(onProgress, signal);
   if (result === "busy") throw new Error("the full sync was busy");
@@ -905,6 +905,94 @@ describe("SyncEngine.fullSync", () => {
     expect(result.perAccount.b).toMatchObject({ ok: true, written: 1 });
     expect(app.exists(notePath("m3"))).toBe(true);
     expect(device.account("a")).toMatchObject({ failing: true, lastError: "network" });
+    expect(device.account("a").fullSyncActive).toBeUndefined();
+    expect(device.account("a").fullSyncCursor).toBeUndefined();
+  });
+
+  it("a stopped full sync keeps the cursors and fullSyncActive, and the next full sync resumes from them", async () => {
+    const { app, engine, server, device } = setup({
+      servers: {
+        a: { email: A_EMAIL, pages: [[meeting("m1")], [meeting("m2"), meeting("m3")], [meeting("m4")]] },
+      },
+    });
+    const signal: FullSyncSignal = { cancelled: false };
+
+    // Stopped after m2, in the middle of page 1: as if Obsidian had closed there.
+    const first = await fullSync(
+      engine,
+      (done) => {
+        if (done === 2) signal.stopped = true;
+      },
+      signal,
+    );
+
+    expect(server("a").listCalls.map((call) => call.cursorUrl)).toEqual([undefined, pageUrl(1)]);
+    expect(app.exists(notePath("m1"))).toBe(true);
+    expect(app.exists(notePath("m2"))).toBe(true);
+    expect(filesOf(app, "m3")).toEqual([]);
+    expect(filesOf(app, "m4")).toEqual([]);
+    expect(first.perAccount.a).toMatchObject({ ok: true, written: 2 });
+    expect(device.account("a").fullSyncActive).toBe(true);
+    expect(device.account("a").fullSyncCursor).toBe(pageUrl(1));
+
+    // The next full sync (a fresh signal) picks up at page 1 and finishes.
+    server("a").listCalls.length = 0;
+    const progress: number[] = [];
+    const second = await fullSync(engine, (done) => progress.push(done));
+
+    expect(server("a").listCalls.map((call) => call.cursorUrl)).toEqual([pageUrl(1), pageUrl(2)]);
+    expect(filesOf(app, "m3")).toHaveLength(1);
+    expect(filesOf(app, "m4")).toHaveLength(1);
+    expect(progress).toEqual([1, 2, 3]);
+    expect(second.perAccount.a).toMatchObject({ ok: true });
+    expect(device.account("a").fullSyncActive).toBeUndefined();
+    expect(device.account("a").fullSyncCursor).toBeUndefined();
+  });
+
+  it("a stopped full sync leaves the accounts it had not reached marked as unfinished", async () => {
+    const { engine, server, device } = setup({
+      accounts: [A, B],
+      servers: {
+        a: { email: A_EMAIL, pages: [[meeting("m1")], [meeting("m2")]] },
+        b: { email: B_EMAIL, pages: [[meeting("m3", ownedBy(B_EMAIL))]] },
+      },
+    });
+    const signal: FullSyncSignal = { cancelled: false };
+
+    await fullSync(
+      engine,
+      () => {
+        signal.stopped = true;
+      },
+      signal,
+    );
+
+    expect(server("b").listCalls).toEqual([]);
+    expect(device.account("a")).toMatchObject({ fullSyncActive: true });
+    expect(device.account("b")).toMatchObject({ fullSyncActive: true });
+
+    // Both resume, and both finish.
+    const result = await fullSync(engine);
+    expect(Object.keys(result.perAccount)).toEqual(["a", "b"]);
+    expect(device.account("a").fullSyncActive).toBeUndefined();
+    expect(device.account("b").fullSyncActive).toBeUndefined();
+  });
+
+  it("clears the cursors when the user cancelled, even if the full sync was also stopped", async () => {
+    const { engine, device } = setup({
+      servers: { a: { email: A_EMAIL, pages: [[meeting("m1")], [meeting("m2")]] } },
+    });
+    const signal: FullSyncSignal = { cancelled: false };
+
+    await fullSync(
+      engine,
+      () => {
+        signal.stopped = true;
+        signal.cancelled = true;
+      },
+      signal,
+    );
+
     expect(device.account("a").fullSyncActive).toBeUndefined();
     expect(device.account("a").fullSyncCursor).toBeUndefined();
   });
