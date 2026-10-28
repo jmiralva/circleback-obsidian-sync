@@ -1,6 +1,7 @@
 import type { PluginManifest } from "obsidian";
 import CirclebackSyncPlugin from "../src/main";
 import { DEFAULT_SETTINGS } from "../src/settings/types";
+import { CirclebackSettingTab } from "../src/ui/settingsTab";
 import { logger } from "../src/util/logger";
 import { Plugin as MockPlugin } from "./__mocks__/obsidian";
 import { createFakeApp, type FakeApp } from "./harness/fakeApp";
@@ -148,6 +149,13 @@ describe("CirclebackSyncPlugin.onload", () => {
     expect(plugin.runner).toBeDefined();
     expect(typeof plugin.refreshStatus).toBe("function");
     expect(plugin.clientFor("cb_key_a")).toBeDefined();
+  });
+
+  it("registers the settings tab, once", async () => {
+    const { recorded } = await load();
+
+    expect(recorded.settingTabs).toHaveLength(1);
+    expect(recorded.settingTabs[0]).toBeInstanceOf(CirclebackSettingTab);
   });
 
   it("starts the scheduler only after the layout is ready and the cache has resolved", async () => {

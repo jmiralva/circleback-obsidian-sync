@@ -1,0 +1,37 @@
+/* Settings tab */
+
+/* One block of settings per account, set apart from the next. */
+.circleback-sync-account {
+  margin-top: var(--size-4-4);
+  padding-top: var(--size-4-2);
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+/* What "Test connection" said, under the account's button. */
+.circleback-sync-test-result {
+  padding-bottom: var(--size-4-2);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.circleback-sync-test-result:empty {
+  display: none;
+}
+
+.circleback-sync-duplicate-group {
+  margin-bottom: var(--size-4-3);
+}
+
+.circleback-sync-duplicate-kind {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.circleback-sync-duplicate-group ul {
+  margin: 0;
+}
+
+/* The button in the notice that offers a full sync. */
+.circleback-sync-notice-button {
+  margin-top: var(--size-4-2);
+}

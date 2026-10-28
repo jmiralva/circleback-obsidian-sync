@@ -11,6 +11,7 @@ import { Readiness } from "./sync/readiness";
 import { SyncRunner } from "./sync/runner";
 import { Scheduler, minutesToMs } from "./sync/scheduler";
 import { SyncEngine } from "./sync/syncEngine";
+import { CirclebackSettingTab } from "./ui/settingsTab";
 import { logger } from "./util/logger";
 import type { Timers } from "./util/timers";
 
@@ -104,6 +105,8 @@ export default class CirclebackSyncPlugin extends Plugin {
         runner.cancelFullSync();
       },
     });
+
+    this.addSettingTab(new CirclebackSettingTab(this.app, this));
 
     // The first automatic sync comes a settle delay after this, not at once.
     void readiness.whenReady().then(() => scheduler.start());

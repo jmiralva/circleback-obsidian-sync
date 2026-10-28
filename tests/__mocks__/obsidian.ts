@@ -9,6 +9,44 @@ export { moment };
 
 export const requestUrl = jest.fn();
 
+// Obsidian's `debounce`: calls `cb` once `timeout` ms after the last call when `resetTimer` is true.
+// `run` calls it at once if a call is pending, and `cancel` drops the pending call.
+export function debounce<T extends unknown[], V>(
+  cb: (...args: T) => V,
+  timeout = 0,
+  resetTimer = false,
+): ((...args: T) => unknown) & { cancel(): unknown; run(): V | void } {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  let pending: T | null = null;
+  const fire = (): V | void => {
+    timer = null;
+    const args = pending;
+    pending = null;
+    if (args !== null) return cb(...args);
+  };
+  const debounced = (...args: T): unknown => {
+    pending = args;
+    if (timer !== null && resetTimer) {
+      clearTimeout(timer);
+      timer = null;
+    }
+    timer ??= setTimeout(fire, timeout);
+    return debounced;
+  };
+  debounced.cancel = (): unknown => {
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    pending = null;
+    return debounced;
+  };
+  debounced.run = (): V | void => {
+    if (timer === null) return;
+    clearTimeout(timer);
+    return fire();
+  };
+  return debounced;
+}
+
 export class Notice {
   constructor(
     public message: string,
@@ -52,6 +90,7 @@ export class Plugin {
   readonly registeredEvents: unknown[] = [];
   readonly cleanups: Array<() => void> = [];
   readonly intervals: number[] = [];
+  readonly settingTabs: unknown[] = [];
 
   constructor(app: App, manifest: PluginManifest) {
     this.app = app;
@@ -76,6 +115,10 @@ export class Plugin {
     const item = new FakeStatusBarItem();
     this.statusBarItems.push(item);
     return item;
+  }
+
+  addSettingTab(tab: unknown): void {
+    this.settingTabs.push(tab);
   }
 
   registerEvent(ref: unknown): void {

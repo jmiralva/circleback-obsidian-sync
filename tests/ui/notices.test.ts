@@ -5,8 +5,12 @@ import {
   FULL_SYNC_RESUMING,
   FULL_SYNC_STARTED,
   FULL_SYNC_STOPPING,
+  LOGS_COPIED,
+  LOGS_NOT_COPIED,
   NO_FULL_SYNC,
   NO_KEY_NOTICE,
+  OUTPUT_CHANGE_NOTICE,
+  SETTINGS_NOT_SAVED,
   SYNC_OFF_NOTICE,
   WAITING_FOR_VAULT,
   duplicateNotice,
@@ -191,5 +195,14 @@ describe("fixed notices", () => {
     expect(FULL_SYNC_STOPPING).toBe("Circleback Sync: stopping the full sync after the current meeting.");
     expect(FULL_SYNC_CANCELLED).toBe("Circleback Sync: full sync cancelled.");
     expect(NO_FULL_SYNC).toBe("Circleback Sync: no full sync is running.");
+  });
+
+  it("have the words the settings tab tells the user", () => {
+    expect(OUTPUT_CHANGE_NOTICE).toBe(
+      "Circleback Sync: these changes apply to meetings synced from now on. Run a full sync to update existing notes.",
+    );
+    expect(SETTINGS_NOT_SAVED).toBe("Circleback Sync: could not save the settings.");
+    expect(LOGS_COPIED).toBe("Circleback Sync: logs copied. API keys are removed from them.");
+    expect(LOGS_NOT_COPIED).toBe("Circleback Sync: could not copy the logs.");
   });
 });

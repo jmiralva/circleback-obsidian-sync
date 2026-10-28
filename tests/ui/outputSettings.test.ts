@@ -1,0 +1,84 @@
+import { DEFAULT_SETTINGS } from "../../src/settings/types";
+import type { CirclebackSyncSettings } from "../../src/settings/types";
+import { OUTPUT_SETTINGS, changedOutputSettings } from "../../src/ui/outputSettings";
+
+// A different value of the same kind, whatever the setting is.
+function changed(value: unknown): unknown {
+  if (typeof value === "boolean") return !value;
+  if (typeof value === "number") return value + 1;
+  return `${String(value)}x`;
+}
+
+function withChange(key: keyof CirclebackSyncSettings): CirclebackSyncSettings {
+  return { ...DEFAULT_SETTINGS, [key]: changed(DEFAULT_SETTINGS[key]) };
+}
+
+describe("OUTPUT_SETTINGS", () => {
+  it("names the settings that change what is written to existing notes", () => {
+    expect(OUTPUT_SETTINGS).toEqual([
+      "syncTranscripts",
+      "includePrivateNotes",
+      "includeActionItems",
+      "includeInsights",
+      "saveAs",
+      "baseFolderType",
+      "customBaseFolder",
+      "subfolderPattern",
+      "customSubfolderPattern",
+      "filenamePattern",
+      "transcriptHandling",
+      "customTranscriptBaseFolder",
+      "transcriptSubfolderPattern",
+      "customTranscriptSubfolderPattern",
+      "transcriptFilenamePattern",
+      "selfLabel",
+    ]);
+  });
+});
+
+describe("changedOutputSettings", () => {
+  it("flags output-affecting setting changes", () => {
+    const next = { ...DEFAULT_SETTINGS, filenamePattern: "{date} {title}" };
+
+    expect(changedOutputSettings(DEFAULT_SETTINGS, next)).toEqual(["filenamePattern"]);
+  });
+
+  it("ignores non-output changes", () => {
+    const next = { ...DEFAULT_SETTINGS, syncIntervalMinutes: 60 };
+
+    expect(changedOutputSettings(DEFAULT_SETTINGS, next)).toEqual([]);
+  });
+
+  it("flags each output setting on its own", () => {
+    for (const key of OUTPUT_SETTINGS) {
+      expect(changedOutputSettings(DEFAULT_SETTINGS, withChange(key))).toEqual([key]);
+    }
+  });
+
+  it("ignores every setting that is not an output setting", () => {
+    const others = (Object.keys(DEFAULT_SETTINGS) as Array<keyof CirclebackSyncSettings>).filter(
+      (key) => !OUTPUT_SETTINGS.includes(key) && key !== "accounts",
+    );
+    expect(others.length).toBeGreaterThan(0);
+
+    for (const key of others) {
+      expect(changedOutputSettings(DEFAULT_SETTINGS, withChange(key))).toEqual([]);
+    }
+  });
+
+  it("ignores edits to the account list", () => {
+    const next = { ...DEFAULT_SETTINGS, accounts: [{ id: "a", label: "Work", selfNameOverride: "Jo" }] };
+
+    expect(changedOutputSettings(DEFAULT_SETTINGS, next)).toEqual([]);
+  });
+
+  it("lists several changes in the order of OUTPUT_SETTINGS, not the order they were made", () => {
+    const next = { ...DEFAULT_SETTINGS, selfLabel: "name" as const, syncTranscripts: true, saveAs: "sections" as const };
+
+    expect(changedOutputSettings(DEFAULT_SETTINGS, next)).toEqual(["syncTranscripts", "saveAs", "selfLabel"]);
+  });
+
+  it("returns nothing when a setting was changed and changed back", () => {
+    expect(changedOutputSettings(DEFAULT_SETTINGS, { ...DEFAULT_SETTINGS })).toEqual([]);
+  });
+});

@@ -21,6 +21,15 @@ export const FULL_SYNC_STOPPING = "Circleback Sync: stopping the full sync after
 export const FULL_SYNC_CANCELLED = "Circleback Sync: full sync cancelled.";
 export const NO_FULL_SYNC = "Circleback Sync: no full sync is running.";
 
+// Notices from the settings tab.
+
+/** Shown when the settings tab closes after a setting that shapes the notes was changed. */
+export const OUTPUT_CHANGE_NOTICE =
+  "Circleback Sync: these changes apply to meetings synced from now on. Run a full sync to update existing notes.";
+export const SETTINGS_NOT_SAVED = "Circleback Sync: could not save the settings.";
+export const LOGS_COPIED = "Circleback Sync: logs copied. API keys are removed from them.";
+export const LOGS_NOT_COPIED = "Circleback Sync: could not copy the logs.";
+
 const REASONS: Record<AccountErrorKind, string> = {
   auth: "the API key was not accepted",
   forbidden: "Circleback refused access",
