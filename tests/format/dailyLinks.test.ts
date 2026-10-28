@@ -28,6 +28,11 @@ function add(text: string, ...links: DailyLink[]): string {
   return upsertLinkLines(text, HEADING, links, [], resolveId);
 }
 
+/** Removes the meetings' own lines, as the plugin wrote them (alias = the id in capitals, like `own`). */
+function drop(text: string, ...ids: string[]): string {
+  return upsertLinkLines(text, HEADING, [], ids.map((id) => ({ id, alias: id.toUpperCase() })), resolveId);
+}
+
 describe("upsertLinkLines", () => {
   it("keeps hand-typed and Granola lines", () => {
     const text = note("- 09:00 - [[Meetings/Granola/x|x]]", "- note to self", own("a", "10:00"));
@@ -107,7 +112,7 @@ describe("upsertLinkLines", () => {
       "- 10:00 - [[Circleback/a|A]] (moved)",
       "- 10:30 - [[Circleback/ghost|ghost]]",
     );
-    const result = upsertLinkLines(text, HEADING, [], ["a"], resolveId);
+    const result = drop(text, "a");
     expect(result).toBe(
       note(
         "- 09:00 - [[Meetings/Granola/x|x]]",
@@ -120,17 +125,38 @@ describe("upsertLinkLines", () => {
 
   it("removes nothing when the id is not in removeIds", () => {
     const text = note(own("a", "09:30"), own("b", "10:00"));
-    expect(upsertLinkLines(text, HEADING, [], ["c"], resolveId)).toBe(text);
+    expect(drop(text, "c")).toBe(text);
+  });
+
+  it("keeps a line whose alias the user changed, even for a meeting being removed", () => {
+    const renamed = "- 09:30 - [[Circleback/a|my own name for it]]";
+    const text = note(renamed, own("b", "10:00"));
+    expect(drop(text, "a", "b")).toBe(note(renamed));
+    // It still holds its place in the time order, and still counts as the meeting being there.
+    expect(add(text, link("c", "09:45"))).toBe(note(renamed, own("c", "09:45"), own("b", "10:00")));
+    expect(add(text, link("a", "09:30"))).toBe(text);
+  });
+
+  it("removes a line only if its alias is exactly the one the plugin writes now", () => {
+    const text = note(own("a", "09:00", "Old name"), own("b", "10:00", "B"));
+    // "a" was renamed upstream in the same run: the stale line stays, which is the safe direction.
+    expect(upsertLinkLines(text, HEADING, [], [{ id: "a", alias: "New name" }], resolveId)).toBe(text);
+    expect(upsertLinkLines(text, HEADING, [], [{ id: "a", alias: "Old name" }], resolveId)).toBe(note(own("b", "10:00", "B")));
+  });
+
+  it("compares the alias after the cleaning new lines get", () => {
+    const text = note(own("a", "09:00", "Q3 _draft_ _ review final"));
+    expect(upsertLinkLines(text, HEADING, [], [{ id: "a", alias: "Q3 ]draft] | review\nfinal" }], resolveId)).toBe(note());
   });
 
   it("leaves an own line outside the section alone", () => {
     const text = ["# Daily", own("a", "09:00"), "", HEADING, own("b", "10:00"), ""].join("\n");
-    expect(upsertLinkLines(text, HEADING, [], ["a", "b"], resolveId)).toBe(["# Daily", own("a", "09:00"), "", HEADING, ""].join("\n"));
+    expect(drop(text, "a", "b")).toBe(["# Daily", own("a", "09:00"), "", HEADING, ""].join("\n"));
   });
 
   it("does nothing to a note without the section when only removing", () => {
     const text = "# Daily\n\nJust text.\n";
-    expect(upsertLinkLines(text, HEADING, [], ["a"], resolveId)).toBe(text);
+    expect(drop(text, "a")).toBe(text);
   });
 
   it("creates the heading when missing", () => {
@@ -158,7 +184,7 @@ describe("upsertLinkLines", () => {
   it("writes an alias that is read back as its own line", () => {
     const first = add(note(), link("a", "10:00", "Q3 [draft] | review"));
     expect(add(first, link("a", "10:00", "Q3 [draft] | review"))).toBe(first);
-    expect(upsertLinkLines(first, HEADING, [], ["a"], resolveId)).toBe(note());
+    expect(upsertLinkLines(first, HEADING, [], [{ id: "a", alias: "Q3 [draft] | review" }], resolveId)).toBe(note());
   });
 
   describe("where the section is", () => {
@@ -227,7 +253,7 @@ describe("upsertLinkLines", () => {
 
     it("finds and removes own lines in a CRLF note", () => {
       const text = ["# Daily", HEADING, own("a", "09:00"), own("b", "10:00"), ""].join("\r\n");
-      expect(upsertLinkLines(text, HEADING, [], ["a"], resolveId)).toBe(["# Daily", HEADING, own("b", "10:00"), ""].join("\r\n"));
+      expect(drop(text, "a")).toBe(["# Daily", HEADING, own("b", "10:00"), ""].join("\r\n"));
     });
 
     it("does not add a trailing newline to a note that has none", () => {
@@ -238,7 +264,7 @@ describe("upsertLinkLines", () => {
     it("keeps a note exactly as it is when there is nothing to do", () => {
       const text = "# Daily\r\n\nmixed endings\r\n\r\n## Meetings\n- x\r\n  \n";
       expect(upsertLinkLines(text, HEADING, [], [], resolveId)).toBe(text);
-      expect(upsertLinkLines(text, HEADING, [], ["a"], resolveId)).toBe(text);
+      expect(drop(text, "a")).toBe(text);
     });
   });
 });

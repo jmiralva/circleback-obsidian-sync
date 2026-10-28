@@ -205,10 +205,14 @@ export class DailyNotes {
 
   /**
    * Puts a `- HH:MM - [[note|title]]` line for the meeting in the daily note of the day it started
-   * (local time), under the link heading. Does nothing unless linking is on. When `oldStart`, the
-   * start the note had before this sync, is on another day, the meeting's own line is removed from
-   * that day's note, if that note exists (it is never created to remove a line). A missing note for
-   * the new day is created only as `createMissingDailyNotes` allows. A failure is thrown.
+   * (local time), under the link heading. Does nothing unless linking is on. A missing note for the
+   * new day is created only as `createMissingDailyNotes` allows.
+   *
+   * When `oldStart`, the start the note had before this sync, is on another day, the meeting's own
+   * line is then removed from that day's note, if that note exists (it is never created to remove a
+   * line). The line goes only while it still reads as the plugin wrote it, with the meeting's current
+   * title as its alias: a line the user edited stays. The removal comes after the add, so a failed
+   * add leaves the old line in place. A failure is thrown.
    */
   async linkMeeting(note: TFile, m: Meeting, oldStart: string | null, s: CirclebackSyncSettings, now: Moment): Promise<void> {
     if (!s.linkFromDailyNotes) return;
@@ -220,23 +224,26 @@ export class DailyNotes {
     const start = this.startOf(m, title);
     if (start === null) return;
 
+    // Add to the new day first, then take the line off the old one: if the add fails, the old line
+    // is still there, and the next run (which calls this again) finishes the move.
+    const file = await getDailyNote(this.app, start, shouldCreate(s.createMissingDailyNotes, start, now), now);
+    if (file !== null) {
+      const link: DailyLink = {
+        id: m.id,
+        time: start.format("HH:mm"),
+        linkpath: note.path.replace(/\.md$/i, ""),
+        alias: title,
+      };
+      const resolve = this.idResolver(file.path);
+      await this.update(file, (text) => upsertLinkLines(text, s.dailyNoteLinkHeading, [link], [], resolve));
+    }
+
     if (oldStart !== null) {
       const before = meetingLocal(oldStart);
       if (before.isValid() && localDay(before) !== localDay(start)) {
-        await this.removeLine(before, m.id, s.dailyNoteLinkHeading);
+        await this.removeLine(before, file, m.id, title, s.dailyNoteLinkHeading);
       }
     }
-
-    const file = await getDailyNote(this.app, start, shouldCreate(s.createMissingDailyNotes, start, now), now);
-    if (file === null) return;
-    const link: DailyLink = {
-      id: m.id,
-      time: start.format("HH:mm"),
-      linkpath: note.path.replace(/\.md$/i, ""),
-      alias: title,
-    };
-    const resolve = this.idResolver(file.path);
-    await this.update(file, (text) => upsertLinkLines(text, s.dailyNoteLinkHeading, [link], [], resolve));
   }
 
   /**
@@ -266,12 +273,16 @@ export class DailyNotes {
     return null;
   }
 
-  /** Removes the meeting's own line from an existing daily note. */
-  private async removeLine(date: Moment, id: string, heading: string): Promise<void> {
+  /**
+   * Removes the meeting's own line, if unedited, from an existing daily note. Not from `except`, the
+   * note it was just added to: a date format coarser than a day (a monthly note) puts the old and the
+   * new day in one file, and the line there is the one just written.
+   */
+  private async removeLine(date: Moment, except: TFile | null, id: string, alias: string, heading: string): Promise<void> {
     const file = await getDailyNote(this.app, date, false);
-    if (file === null) return;
+    if (file === null || file === except) return;
     const resolve = this.idResolver(file.path);
-    await this.update(file, (text) => upsertLinkLines(text, heading, [], [id], resolve));
+    await this.update(file, (text) => upsertLinkLines(text, heading, [], [{ id, alias }], resolve));
   }
 
   /** The `circleback_id` of the note a link in the given daily note points to: the cache first, then the index. */

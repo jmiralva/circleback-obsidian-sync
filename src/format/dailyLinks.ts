@@ -4,8 +4,10 @@
 // - A line is the plugin's own only if it has exactly the format above AND its link resolves to
 //   a note with a `circleback_id`. Resolving is what lets a line survive Obsidian rewriting its
 //   link when the note is renamed or moved.
-// - Only own lines are ever removed, and only for the ids asked for. A line the user edited
-//   (extra text, a changed alias) no longer matches the format, so it is never touched.
+// - Only own lines are ever removed, and only for the meetings asked for, and only while the
+//   line still reads exactly as the plugin would write it now (same alias). A line the user edited
+//   (extra text, a changed alias) is left alone, even though it still anchors the time order and
+//   still counts as the meeting being present.
 // - A meeting that is linked anywhere in the section, in any form, is not added again.
 // - Nothing else in the note changes, down to line endings.
 //
@@ -23,6 +25,14 @@ export interface DailyLink {
   /** The text the link shows. `]` and `|` in it become `_`, and line breaks become spaces. */
   alias: string;
 }
+
+/**
+ * A line to take out: the meeting's id and the alias the plugin would write for it now. The line
+ * goes only if it is an own line for that meeting with exactly that alias, so a line whose alias
+ * the user changed stays. (A meeting renamed upstream in the same run leaves its old line behind
+ * as well, which is the safe direction.)
+ */
+export type DailyLinkRemoval = Pick<DailyLink, "id" | "alias">;
 
 /** Turns a link target into the `circleback_id` of the note it points to, or null. */
 export type ResolveId = (linkpath: string) => string | null;
@@ -46,13 +56,14 @@ function lineText(link: DailyLink): string {
 interface OwnLine {
   time: string;
   id: string;
+  alias: string;
 }
 
 function ownLine(text: string, resolve: ResolveId): OwnLine | null {
   const match = OWN_LINE.exec(text);
   if (!match) return null;
   const id = resolve(match[2] ?? "");
-  return id === null ? null : { time: match[1] ?? "", id };
+  return id === null ? null : { time: match[1] ?? "", id, alias: match[3] ?? "" };
 }
 
 /** Whether any wikilink on the line points to the meeting, whatever else the line says. */
@@ -65,14 +76,19 @@ function linksTo(text: string, id: string, resolve: ResolveId): boolean {
   return false;
 }
 
-function removeOwnLines(lines: Line[], spec: HeadingSpec, ids: ReadonlySet<string>, resolve: ResolveId): void {
+function removeOwnLines(
+  lines: Line[],
+  spec: HeadingSpec,
+  aliases: ReadonlyMap<string, string>,
+  resolve: ResolveId,
+): void {
   const section = findSection(lines, spec);
   if (!section) return;
   // From the bottom, so the indexes still to visit stay valid.
   for (let i = section.end - 1; i > section.headingIndex; i--) {
     if (section.verbatim[i]) continue;
     const own = ownLine(lines[i]?.text ?? "", resolve);
-    if (own === null || !ids.has(own.id)) continue;
+    if (own === null || aliases.get(own.id) !== own.alias) continue;
     const [removed] = lines.splice(i, 1);
     // A removed last line without a newline must not leave one on the line before it.
     const previous = lines[i - 1];
@@ -104,23 +120,25 @@ function addLink(lines: Line[], spec: HeadingSpec, link: DailyLink, resolve: Res
 }
 
 /**
- * Adds a line for each link in `add` and removes the own lines of the meetings in `removeIds`,
+ * Adds a line for each link in `add` and removes the own lines of the meetings in `remove`,
  * in the section under `heading`. Returns the text unchanged when there is nothing to do.
  *
  * - A new line goes before the first own line with a later time. With none, it goes after the
  *   section's last non-blank line (so a blank line before the next heading stays).
  * - With no such section, `heading` and the lines are appended at the end of the note.
  * - A meeting already linked anywhere in the section, by an own line or one the user edited, gets nothing added.
+ * - A line is removed only if it is an own line for a meeting in `remove` and its alias is exactly
+ *   the one given there (after the same cleaning new lines get). Any other line stays.
  */
 export function upsertLinkLines(
   text: string,
   heading: string,
   add: readonly DailyLink[],
-  removeIds: readonly string[],
+  remove: readonly DailyLinkRemoval[],
   resolveId: ResolveId,
 ): string {
   const spec = normalizeHeading(heading);
-  if (spec === null || (add.length === 0 && removeIds.length === 0)) return text;
+  if (spec === null || (add.length === 0 && remove.length === 0)) return text;
 
   const cache = new Map<string, string | null>();
   const resolve: ResolveId = (linkpath) => {
@@ -130,7 +148,10 @@ export function upsertLinkLines(
 
   const lines = splitLines(text);
   const eol = lineEnding(text);
-  if (removeIds.length > 0) removeOwnLines(lines, spec, new Set(removeIds), resolve);
+  if (remove.length > 0) {
+    const aliases = new Map(remove.map(({ id, alias }) => [id, cleanAlias(alias)] as const));
+    removeOwnLines(lines, spec, aliases, resolve);
+  }
   for (const link of add) addLink(lines, spec, link, resolve, eol);
   return joinLines(lines);
 }

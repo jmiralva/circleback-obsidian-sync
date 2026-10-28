@@ -461,6 +461,57 @@ describe("DailyNotes.linkMeeting", () => {
       expect(fake.fileText(DAY_26)).toBe(["# Day", "## Meetings", "- 09:00 - [[Meetings/Granola/x|x]]", "- note to self", edited, ""].join("\n"));
     });
 
+    it("keeps a line whose alias the user changed", async () => {
+      const mine = `- 10:00 - [[Meetings/Circleback/Meeting 1|my notes on the call]]`;
+      const text = ["# Day", "## Meetings", mine, ""].join("\n");
+      const fake = app({ [DAY_26]: text });
+      await new DailyNotes(fake).linkMeeting(file(fake, NOTE_PATH), moved, START, settings(), NOW);
+      expect(fake.fileText(DAY_26)).toBe(text);
+      expect(fake.fileText(DAY_27)).toContain(`- 10:00 - ${LINK}`);
+    });
+
+    it("leaves a line written under the old title when the meeting was renamed in the same run", async () => {
+      const stale = "- 10:00 - [[Meetings/Circleback/Meeting 1|Old title]]";
+      const text = ["# Day", "## Meetings", stale, ""].join("\n");
+      const fake = app({ [DAY_26]: text });
+      await new DailyNotes(fake).linkMeeting(file(fake, NOTE_PATH), { ...moved, name: "New title" }, START, settings(), NOW);
+      expect(fake.fileText(DAY_26)).toBe(text);
+      expect(fake.fileText(DAY_27)).toContain("- 10:00 - [[Meetings/Circleback/Meeting 1|New title]]");
+    });
+
+    it("keeps the old line when adding to the new day fails, and a retry finishes the move", async () => {
+      const fake = app();
+      const dailyNotes = new DailyNotes(fake);
+      const note = file(fake, NOTE_PATH);
+      await dailyNotes.linkMeeting(note, meeting(), null, settings(), NOW);
+
+      const realProcess = fake.vault.process.bind(fake.vault);
+      const failing = jest.spyOn(fake.vault, "process").mockImplementation(async (target, change) => {
+        if (target.path === DAY_27) throw new Error("disk full");
+        return realProcess(target, change);
+      });
+      await expect(dailyNotes.linkMeeting(note, moved, START, settings(), NOW)).rejects.toThrow("disk full");
+      expect(fake.fileText(DAY_26)).toContain(`- 10:00 - ${LINK}`);
+      expect(fake.fileText(DAY_27)).not.toContain(LINK);
+
+      failing.mockRestore();
+      await dailyNotes.linkMeeting(note, moved, START, settings(), NOW);
+      expect(fake.fileText(DAY_26)).not.toContain(LINK);
+      expect(fake.fileText(DAY_27)).toContain(`- 10:00 - ${LINK}`);
+    });
+
+    it("keeps the line when both days are in one note, as with a monthly note", async () => {
+      const monthly = {
+        [PERIODIC_NOTES]: JSON.stringify({ daily: { enabled: true, folder: "d", format: "YYYY-MM", template: "" } }),
+      };
+      const fake = app(monthly);
+      const dailyNotes = new DailyNotes(fake);
+      const note = file(fake, NOTE_PATH);
+      await dailyNotes.linkMeeting(note, meeting(), null, settings(), NOW);
+      await dailyNotes.linkMeeting(note, moved, START, settings(), NOW);
+      expect(fake.fileText("d/2026-10.md")).toBe(`## Meetings\n- 10:00 - ${LINK}\n`);
+    });
+
     it("never creates the old day's note just to remove a line", async () => {
       const fake = app();
       await new DailyNotes(fake).linkMeeting(file(fake, NOTE_PATH), moved, START, settings(), NOW);
