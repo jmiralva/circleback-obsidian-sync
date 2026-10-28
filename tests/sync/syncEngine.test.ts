@@ -11,6 +11,7 @@ import { DEFAULT_SETTINGS, type AccountConfig, type CirclebackSyncSettings } fro
 import { DeviceState } from "../../src/state/deviceState";
 import { SyncLock } from "../../src/sync/lock";
 import { SyncEngine, type FullSyncSignal, type RunResult, type SyncClient } from "../../src/sync/syncEngine";
+import { deferred } from "../harness/deferred";
 import { createFakeApp, type FakeApp } from "../harness/fakeApp";
 import { pluginFile } from "../vault/meetingFile";
 
@@ -195,14 +196,6 @@ function frontmatter(app: FakeApp, path: string): Record<string, unknown> {
 /** Every Markdown file whose frontmatter names this meeting. */
 function filesOf(app: FakeApp, id: string): TFile[] {
   return app.vault.getMarkdownFiles().filter((file) => app.metadataCache.getFileCache(file)?.frontmatter?.circleback_id === id);
-}
-
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve: () => void = () => undefined;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
 }
 
 describe("SyncLock", () => {
@@ -974,6 +967,60 @@ describe("SyncEngine.fullSync", () => {
     // Both resume, and both finish.
     const result = await fullSync(engine);
     expect(Object.keys(result.perAccount)).toEqual(["a", "b"]);
+    expect(device.account("a").fullSyncActive).toBeUndefined();
+    expect(device.account("b").fullSyncActive).toBeUndefined();
+  });
+
+  it("does not credit an account with a sync when the full sync was stopped before it was reached", async () => {
+    const { engine, server, device } = setup({
+      accounts: [A, B],
+      servers: {
+        a: { email: A_EMAIL, pages: [[meeting("m1")]] },
+        b: { email: B_EMAIL, pages: [[meeting("m3", ownedBy(B_EMAIL))]] },
+      },
+    });
+    const signal: FullSyncSignal = { cancelled: false };
+
+    // A finishes its only meeting, and Obsidian closes before B starts.
+    const result = await fullSync(
+      engine,
+      () => {
+        signal.stopped = true;
+      },
+      signal,
+    );
+
+    expect(server("b").listCalls).toEqual([]);
+    expect(Object.keys(result.perAccount)).toEqual(["a"]);
+    expect(device.account("a").lastSuccessAt).toBe(NOW.toISOString());
+    expect(device.account("b").lastSuccessAt).toBeUndefined();
+    expect(device.account("b").failing).toBeUndefined();
+    // B is still marked unfinished, so the next full sync gets to it.
+    expect(device.account("b").fullSyncActive).toBe(true);
+  });
+
+  it("does not credit an account with a sync when the user cancelled before it was reached", async () => {
+    const { engine, server, device } = setup({
+      accounts: [A, B],
+      servers: {
+        a: { email: A_EMAIL, pages: [[meeting("m1")]] },
+        b: { email: B_EMAIL, pages: [[meeting("m3", ownedBy(B_EMAIL))]] },
+      },
+    });
+    const signal: FullSyncSignal = { cancelled: false };
+
+    const result = await fullSync(
+      engine,
+      () => {
+        signal.cancelled = true;
+      },
+      signal,
+    );
+
+    expect(server("b").listCalls).toEqual([]);
+    expect(Object.keys(result.perAccount)).toEqual(["a"]);
+    expect(device.account("b").lastSuccessAt).toBeUndefined();
+    // The user chose to stop, so nothing is left to resume.
     expect(device.account("a").fullSyncActive).toBeUndefined();
     expect(device.account("b").fullSyncActive).toBeUndefined();
   });

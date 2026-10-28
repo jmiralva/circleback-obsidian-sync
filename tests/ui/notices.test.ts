@@ -1,4 +1,19 @@
-import { duplicateNotice, reasonText, resultNotice, transitionNotices } from "../../src/ui/notices";
+import {
+  BUSY_NOTICE,
+  CRASHED_NOTICE,
+  FULL_SYNC_CANCELLED,
+  FULL_SYNC_RESUMING,
+  FULL_SYNC_STARTED,
+  FULL_SYNC_STOPPING,
+  NO_FULL_SYNC,
+  NO_KEY_NOTICE,
+  SYNC_OFF_NOTICE,
+  WAITING_FOR_VAULT,
+  duplicateNotice,
+  reasonText,
+  resultNotice,
+  transitionNotices,
+} from "../../src/ui/notices";
 import type { AccountErrorKind, AccountResult, RunResult } from "../../src/sync/syncEngine";
 
 function account(changes: Partial<AccountResult> = {}): AccountResult {
@@ -107,7 +122,24 @@ describe("resultNotice", () => {
       'Circleback Sync: 1 meeting updated. 2 could not be written; use "Copy logs" in the plugin settings for details. 2 accounts could not sync; see the status bar.',
     );
     expect(resultNotice(result({ a: account({ ok: false, error: "auth" }) }), manual)).toBe(
-      "Circleback Sync: everything is up to date. 1 account could not sync; see the status bar.",
+      "Circleback Sync: no meetings updated. 1 account could not sync; see the status bar.",
+    );
+  });
+
+  it("says no meetings were updated, not that everything is up to date, when nothing was written but something failed", () => {
+    expect(resultNotice(result({ a: account({ failed: 2 }) }), manual)).toBe(
+      'Circleback Sync: no meetings updated. 2 could not be written; use "Copy logs" in the plugin settings for details.',
+    );
+    expect(resultNotice(result({ a: account({ ok: false, error: "auth" }), b: account({ skipped: 3 }) }), manual)).toBe(
+      "Circleback Sync: no meetings updated. 1 account could not sync; see the status bar.",
+    );
+    // Only when nothing failed is everything up to date.
+    expect(resultNotice(result({ a: account({ skipped: 3 }), b: account({ skipped: 1 }) }), manual)).toBe(
+      "Circleback Sync: everything is up to date.",
+    );
+    // A write beside a failure keeps the count.
+    expect(resultNotice(result({ a: account({ written: 1 }), b: account({ ok: false, error: "auth" }) }), manual)).toBe(
+      "Circleback Sync: 1 meeting updated. 1 account could not sync; see the status bar.",
     );
   });
 
@@ -116,7 +148,7 @@ describe("resultNotice", () => {
     expect(resultNotice(result({ a: account({ written: 1 }) }), { ...auto, show: false })).toBeNull();
     expect(resultNotice(result({ a: account({ failed: 1 }) }), { ...auto, show: false })).toBeNull();
     expect(resultNotice(result({ a: account({ failed: 1 }) }), auto)).toBe(
-      'Circleback Sync: everything is up to date. 1 could not be written; use "Copy logs" in the plugin settings for details.',
+      'Circleback Sync: no meetings updated. 1 could not be written; use "Copy logs" in the plugin settings for details.',
     );
     // An account that failed to sync is reported by the transition notice, not by this one.
     expect(resultNotice(result({ a: account({ ok: false, error: "auth" }) }), auto)).toBeNull();
@@ -140,5 +172,24 @@ describe("resultNotice", () => {
     expect(resultNotice(result({ a: account({ written: 2, failed: 1 }) }), full)).toBe(
       'Circleback Sync: full sync finished. 2 meetings updated. 1 could not be written; use "Copy logs" in the plugin settings for details.',
     );
+  });
+});
+
+describe("fixed notices", () => {
+  it("have the words the user is told", () => {
+    expect(WAITING_FOR_VAULT).toBe("Circleback Sync: waiting for Obsidian to finish loading the vault.");
+    expect(SYNC_OFF_NOTICE).toBe(
+      'Circleback Sync: syncing is off on this device. Turn on "Sync on this device" in the plugin settings.',
+    );
+    expect(NO_KEY_NOTICE).toBe("Circleback Sync: no account has an API key on this device. Add one in the plugin settings.");
+    expect(BUSY_NOTICE).toBe("Circleback Sync: a sync is already running.");
+    expect(CRASHED_NOTICE).toBe(
+      'Circleback Sync: the sync failed because of an unexpected error. Use "Copy logs" in the plugin settings for details.',
+    );
+    expect(FULL_SYNC_STARTED).toBe("Circleback Sync: full sync started. Progress is in the status bar.");
+    expect(FULL_SYNC_RESUMING).toBe("Circleback Sync: resuming the full sync.");
+    expect(FULL_SYNC_STOPPING).toBe("Circleback Sync: stopping the full sync after the current meeting.");
+    expect(FULL_SYNC_CANCELLED).toBe("Circleback Sync: full sync cancelled.");
+    expect(NO_FULL_SYNC).toBe("Circleback Sync: no full sync is running.");
   });
 });

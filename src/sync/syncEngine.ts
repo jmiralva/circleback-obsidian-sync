@@ -214,8 +214,13 @@ export class SyncEngine {
     const seen = new Set<string>();
     const ran = new Set<AccountRun>();
     let done = 0;
+    let halt: "cancelled" | "stopped" | null = null;
     for (const acc of accounts) {
       if (!acc.result.ok) continue;
+      // Checked before the account counts as having run, so one that was never reached is not
+      // credited with a successful sync in `finish`.
+      halt = halted(signal);
+      if (halt !== null) break;
       ran.add(acc);
       // Every other connected account whose email is known, even one that failed this run: a
       // forced rewrite by another account would replace the owner's copy (its private notes, its
@@ -224,14 +229,14 @@ export class SyncEngine {
         .filter((other) => other !== acc && other.ownerEmail !== "")
         .map((other) => other.ownerEmail);
       const outcome = await this.fullSyncAccount(run, acc, owners, seen, signal, () => onProgress(++done));
-      if (outcome === "cancelled") {
-        // The user chose to stop, so the next full sync starts over.
-        for (const other of accounts) this.endFullSync(other);
+      if (outcome === "cancelled" || outcome === "stopped") {
+        halt = outcome;
         break;
       }
-      // Obsidian is closing: every account keeps its mark and cursor, so the next full sync resumes.
-      if (outcome === "stopped") break;
     }
+    // The user chose to stop, so the next full sync starts over. When Obsidian is closing instead
+    // (`stopped`), every account keeps its mark and cursor, so the next full sync resumes.
+    if (halt === "cancelled") for (const acc of accounts) this.endFullSync(acc);
     return this.finish(
       run,
       accounts.filter((acc) => ran.has(acc) || !acc.result.ok),

@@ -1,5 +1,6 @@
 import { CHECK_MS, Scheduler, minutesToMs } from "../../src/sync/scheduler";
 import { logger } from "../../src/util/logger";
+import { deferred } from "../harness/deferred";
 import { jestTimers } from "../harness/timers";
 
 const MIN = 60_000;
@@ -38,14 +39,6 @@ function setup(opts: { run?: () => Promise<unknown> } = {}): Setup {
     }
   };
   return { scheduler, run, advance, tick, clock };
-}
-
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve: () => void = () => undefined;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
 }
 
 beforeEach(() => {

@@ -35,6 +35,14 @@ export default class CirclebackSyncPlugin extends Plugin {
   }
 
   async onload(): Promise<void> {
+    // First, before any await: the cache's first `resolved` event can fire while data.json is
+    // being read, and a gate built after that would never see it. It needs no settings.
+    const readiness = new Readiness({
+      app: this.app,
+      registerEvent: (ref) => this.registerEvent(ref),
+      ...windowTimers,
+    });
+
     const settings = await this.settingsStore.load();
     logger.setDebug(settings.debugLogging);
 
@@ -48,12 +56,6 @@ export default class CirclebackSyncPlugin extends Plugin {
     });
 
     this.statusEl = this.addStatusBarItem();
-    // Built before anything waits on it, so it cannot miss the cache's first `resolved` event.
-    const readiness = new Readiness({
-      app: this.app,
-      registerEvent: (ref) => this.registerEvent(ref),
-      ...windowTimers,
-    });
     const runner = new SyncRunner({
       engine,
       settings: () => this.settingsStore.current,

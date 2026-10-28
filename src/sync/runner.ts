@@ -7,27 +7,32 @@
 //
 // One run at a time through this class, the same as the engine's lock. Keeping the flag here too
 // means a second request never touches the first run's progress or its cancel signal.
+//
+// The public methods never throw or reject: they are called as `void runner.syncNow()`, where a
+// rejection would vanish, so anything that goes wrong is logged instead.
 import type { KeyStore } from "../secrets/keyStore";
 import type { CirclebackSyncSettings } from "../settings/types";
 import type { AccountDeviceState, DeviceState } from "../state/deviceState";
-import { duplicateNotice, resultNotice, transitionNotices } from "../ui/notices";
+import {
+  BUSY_NOTICE,
+  CRASHED_NOTICE,
+  FULL_SYNC_CANCELLED,
+  FULL_SYNC_RESUMING,
+  FULL_SYNC_STARTED,
+  FULL_SYNC_STOPPING,
+  NO_FULL_SYNC,
+  NO_KEY_NOTICE,
+  SYNC_OFF_NOTICE,
+  WAITING_FOR_VAULT,
+  duplicateNotice,
+  resultNotice,
+  transitionNotices,
+} from "../ui/notices";
 import { SYNC_OFF_TEXT, statusText, type StatusAccount } from "../ui/status";
 import { logger } from "../util/logger";
 import type { DuplicateGroup } from "../vault/duplicates";
 import type { Readiness } from "./readiness";
 import type { FullSyncSignal, RunResult, SyncEngine } from "./syncEngine";
-
-const WAITING = "Circleback Sync: waiting for Obsidian to finish loading the vault.";
-const SYNC_OFF = 'Circleback Sync: syncing is off on this device. Turn on "Sync on this device" in the plugin settings.';
-const NO_KEY = "Circleback Sync: no account has an API key on this device. Add one in the plugin settings.";
-const BUSY = "Circleback Sync: a sync is already running.";
-const CRASHED =
-  'Circleback Sync: the sync failed because of an unexpected error. Use "Copy logs" in the plugin settings for details.';
-const FULL_STARTED = "Circleback Sync: full sync started. Progress is in the status bar.";
-const FULL_RESUMING = "Circleback Sync: resuming the full sync.";
-const FULL_STOPPING = "Circleback Sync: stopping the full sync after the current meeting.";
-const FULL_CANCELLED = "Circleback Sync: full sync cancelled.";
-const NO_FULL_SYNC = "Circleback Sync: no full sync is running.";
 
 export interface RunnerDeps {
   engine: Pick<SyncEngine, "sync" | "fullSync">;
@@ -50,6 +55,8 @@ interface RunKind {
 
 export class SyncRunner {
   private running = false;
+  /** Set when the plugin unloads. A run still going finishes its work but says nothing more. */
+  private unloaded = false;
   /** The signal of the full sync that is running, if one is. */
   private signal: FullSyncSignal | null = null;
   private progress: { done: number } | null = null;
@@ -61,38 +68,49 @@ export class SyncRunner {
 
   /** "Sync now": waits for the vault, then runs a normal sync and says how it went. */
   async syncNow(): Promise<void> {
-    if (!(await this.prepare())) return;
-    await this.execute({ full: false, manual: true });
+    await this.guarded(async () => {
+      if (!(await this.prepare())) return;
+      await this.execute({ full: false, manual: true });
+    });
   }
 
   /**
    * What the scheduler calls. A full sync that Obsidian closed on is resumed in place of a normal
-   * sync; otherwise this is a normal sync that stays quiet unless something needs saying.
+   * sync; otherwise this is a normal sync. Neither is user-started, so both stay quiet unless
+   * something needs saying.
    */
   async syncScheduled(): Promise<void> {
-    await this.execute({ full: this.hasUnfinishedFullSync(), manual: false });
+    await this.guarded(() => this.execute({ full: this.hasUnfinishedFullSync(), manual: false }));
   }
 
   async startFullSync(): Promise<void> {
-    if (!(await this.prepare())) return;
-    await this.execute({ full: true, manual: true });
+    await this.guarded(async () => {
+      if (!(await this.prepare())) return;
+      await this.execute({ full: true, manual: true });
+    });
   }
 
   /** Stops the full sync after the current meeting and forgets where it was. */
   cancelFullSync(): void {
-    if (this.signal === null) {
-      this.deps.notify(NO_FULL_SYNC);
-      return;
+    try {
+      if (this.signal === null) {
+        this.say(NO_FULL_SYNC);
+        return;
+      }
+      this.signal.cancelled = true;
+      this.say(FULL_SYNC_STOPPING);
+    } catch (error) {
+      logger.error("Could not cancel the full sync.", error);
     }
-    this.signal.cancelled = true;
-    this.deps.notify(FULL_STOPPING);
   }
 
   /**
-   * Obsidian is closing: a running full sync stops at the next meeting but keeps its place, so it
-   * resumes later. Never cancels, because that would clear where it was.
+   * Obsidian is closing. A running full sync stops at the next meeting but keeps its place, so it
+   * resumes later (never `cancelled`, which would clear where it was). Any run still going
+   * finishes its work, but its notices and status refreshes are dropped.
    */
   stopForUnload(): void {
+    this.unloaded = true;
     if (this.signal !== null) this.signal.stopped = true;
   }
 
@@ -110,7 +128,8 @@ export class SyncRunner {
   statusText(): string {
     const { accounts } = this.deps.settings();
     if (accounts.length === 0) return "";
-    if (!this.deps.device.syncOnThisDevice) return SYNC_OFF_TEXT;
+    // A full sync that is running keeps its progress on show, even if the toggle is switched off meanwhile.
+    if (this.progress === null && !this.deps.device.syncOnThisDevice) return SYNC_OFF_TEXT;
     const perAccount: Record<string, StatusAccount> = {};
     for (const account of accounts) {
       perAccount[account.id] = {
@@ -122,19 +141,38 @@ export class SyncRunner {
     return statusText(perAccount, this.fullSyncProgress ?? undefined);
   }
 
+  /** Runs `work`, logging instead of rejecting if it fails. */
+  private async guarded(work: () => Promise<void>): Promise<void> {
+    try {
+      await work();
+    } catch (error) {
+      logger.error("The sync could not be run.", error);
+    }
+  }
+
+  /** Shows a notice, unless the plugin has been unloaded. */
+  private say(message: string): void {
+    if (!this.unloaded) this.deps.notify(message);
+  }
+
+  /** Tells the status bar to refresh, unless the plugin has been unloaded. */
+  private statusChanged(): void {
+    if (!this.unloaded) this.deps.onStatusChange();
+  }
+
   /** Before a manual or full sync: waits for the vault, and stops with a notice if the sync cannot run here. */
   private async prepare(): Promise<boolean> {
-    const { readiness, device, keys, settings, notify } = this.deps;
+    const { readiness, device, keys, settings } = this.deps;
     if (!readiness.isReady) {
-      notify(WAITING);
+      this.say(WAITING_FOR_VAULT);
       await readiness.whenReady();
     }
     if (!device.syncOnThisDevice) {
-      notify(SYNC_OFF);
+      this.say(SYNC_OFF_NOTICE);
       return false;
     }
     if (!settings().accounts.some((account) => keys.get(account.id) !== null)) {
-      notify(NO_KEY);
+      this.say(NO_KEY_NOTICE);
       return false;
     }
     return true;
@@ -154,23 +192,26 @@ export class SyncRunner {
     }
     this.running = true;
     const signal: FullSyncSignal | null = kind.full ? { cancelled: false, stopped: false } : null;
-    if (signal !== null) {
-      this.signal = signal;
-      this.progress = { done: 0 };
-      this.deps.notify(kind.manual ? FULL_STARTED : FULL_RESUMING);
-      this.deps.onStatusChange();
-    }
-    // Before the engine runs: its `finish` overwrites `failing`, which is what a notice compares with.
-    const before = this.snapshot();
-
+    let before: Record<string, AccountDeviceState> = {};
     let outcome: RunResult | "busy" | null = null;
+    // Everything after `running` is set is inside the try, so that nothing that throws (a notice,
+    // the status bar, the device state) can leave the runner thinking a run is still going.
     try {
+      if (signal !== null) {
+        this.signal = signal;
+        this.progress = { done: 0 };
+        // A resume that follows a run that threw is not announced again; the crash notice said it once.
+        if (kind.manual || !this.lastThrew) this.say(kind.manual ? FULL_SYNC_STARTED : FULL_SYNC_RESUMING);
+        this.statusChanged();
+      }
+      // Before the engine runs: its `finish` overwrites `failing`, which is what a notice compares with.
+      before = this.snapshot();
       outcome =
         signal === null
           ? await this.deps.engine.sync()
           : await this.deps.engine.fullSync((done) => {
               this.progress = { done };
-              this.deps.onStatusChange();
+              this.statusChanged();
             }, signal);
       if (outcome !== "busy") this.lastThrew = false;
     } catch (error) {
@@ -181,13 +222,12 @@ export class SyncRunner {
       this.progress = null;
     }
 
-    // Obsidian is closing when the full sync was stopped: it will resume later, and there is
-    // nobody to tell.
-    if (signal?.stopped !== true) {
+    // Once unloaded, the report would go to nobody.
+    if (!this.unloaded) {
       if (outcome === "busy") this.notifyBusy(kind);
       else if (outcome !== null) this.report(outcome, before, kind, signal?.cancelled === true);
     }
-    this.deps.onStatusChange();
+    this.statusChanged();
   }
 
   /** Each configured account's device state as it is now. */
@@ -197,16 +237,22 @@ export class SyncRunner {
     return before;
   }
 
+  /** A scheduled run that finds the engine busy has nothing to tell the user. */
   private notifyBusy(kind: RunKind): void {
-    if (kind.manual) this.deps.notify(BUSY);
+    if (kind.manual) this.say(BUSY_NOTICE);
   }
 
-  /** An error the engine threw: a bug or a vault error during setup, not an account failing. */
+  /**
+   * An error the engine threw: a bug or a vault error during setup, not an account failing. The
+   * user always hears about one they asked for. A scheduled run (including a resumed full sync)
+   * says so only for the first in a streak, so a failure that repeats every interval is not
+   * announced every interval.
+   */
   private crashed(error: unknown, kind: RunKind): void {
     logger.error("The sync failed with an unexpected error.", error);
     const first = !this.lastThrew;
     this.lastThrew = true;
-    if (kind.manual || kind.full || first) this.deps.notify(CRASHED);
+    if (kind.manual || first) this.say(CRASHED_NOTICE);
   }
 
   private report(result: RunResult, before: Record<string, AccountDeviceState>, kind: RunKind, cancelled: boolean): void {
@@ -224,11 +270,11 @@ export class SyncRunner {
     }
     messages.push(
       cancelled
-        ? FULL_CANCELLED
+        ? FULL_SYNC_CANCELLED
         : resultNotice(result, { manual: kind.manual, fullSync: kind.full, show: settings.showSyncNotifications }),
     );
     for (const message of messages) {
-      if (message !== null) this.deps.notify(message);
+      if (message !== null) this.say(message);
     }
   }
 }

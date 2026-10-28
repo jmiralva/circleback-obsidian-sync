@@ -4,6 +4,23 @@
 import type { AccountDeviceState } from "../state/deviceState";
 import type { AccountErrorKind, RunResult } from "../sync/syncEngine";
 
+// Notices that say the same thing every time.
+
+/** Before a manual sync: the vault is still loading, so the sync waits. */
+export const WAITING_FOR_VAULT = "Circleback Sync: waiting for Obsidian to finish loading the vault.";
+export const SYNC_OFF_NOTICE =
+  'Circleback Sync: syncing is off on this device. Turn on "Sync on this device" in the plugin settings.';
+export const NO_KEY_NOTICE = "Circleback Sync: no account has an API key on this device. Add one in the plugin settings.";
+export const BUSY_NOTICE = "Circleback Sync: a sync is already running.";
+/** The engine threw: a bug or a vault error, not an account failing. */
+export const CRASHED_NOTICE =
+  'Circleback Sync: the sync failed because of an unexpected error. Use "Copy logs" in the plugin settings for details.';
+export const FULL_SYNC_STARTED = "Circleback Sync: full sync started. Progress is in the status bar.";
+export const FULL_SYNC_RESUMING = "Circleback Sync: resuming the full sync.";
+export const FULL_SYNC_STOPPING = "Circleback Sync: stopping the full sync after the current meeting.";
+export const FULL_SYNC_CANCELLED = "Circleback Sync: full sync cancelled.";
+export const NO_FULL_SYNC = "Circleback Sync: no full sync is running.";
+
 const REASONS: Record<AccountErrorKind, string> = {
   auth: "the API key was not accepted",
   forbidden: "Circleback refused access",
@@ -74,11 +91,12 @@ export function resultNotice(
   if (!opts.manual && !opts.fullSync && !(opts.show && (written > 0 || failed > 0))) return null;
 
   const updated = `${written === 1 ? "1 meeting" : `${written} meetings`} updated.`;
-  let text = opts.fullSync
-    ? `Circleback Sync: full sync finished. ${updated}`
-    : written > 0
-      ? `Circleback Sync: ${updated}`
-      : "Circleback Sync: everything is up to date.";
+  let text: string;
+  if (opts.fullSync) text = `Circleback Sync: full sync finished. ${updated}`;
+  else if (written > 0) text = `Circleback Sync: ${updated}`;
+  // "Up to date" would hide a failure that the rest of the sentence goes on to name.
+  else if (failed > 0 || stopped > 0) text = "Circleback Sync: no meetings updated.";
+  else text = "Circleback Sync: everything is up to date.";
   if (failed > 0) text += ` ${failed} could not be written; use "Copy logs" in the plugin settings for details.`;
   if (stopped > 0) text += ` ${stopped === 1 ? "1 account" : `${stopped} accounts`} could not sync; see the status bar.`;
   return text;

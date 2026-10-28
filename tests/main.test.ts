@@ -169,6 +169,26 @@ describe("CirclebackSyncPlugin.onload", () => {
     expect(scheduled).toHaveBeenCalledTimes(1);
   });
 
+  it("does not miss the cache's first resolved event while the settings are loading", async () => {
+    const app = createFakeApp({ layoutReady: false });
+    const plugin = new CirclebackSyncPlugin(app, MANIFEST);
+    // Obsidian finishes indexing while data.json is being read.
+    jest.spyOn(plugin, "loadData").mockImplementation(async () => {
+      app.metadataCache.fireResolved();
+      return PERIODIC;
+    });
+    await plugin.onload();
+    const scheduled = jest.spyOn(plugin.runner, "syncScheduled").mockResolvedValue();
+
+    // The layout is the last thing to be ready. With `resolved` already seen, the scheduler starts
+    // now; had it been missed, the 60 second fallback would delay it.
+    app.workspace.fireLayoutReady();
+    await jest.advanceTimersByTimeAsync(MIN - 1);
+    expect(scheduled).not.toHaveBeenCalled();
+    await jest.advanceTimersByTimeAsync(1);
+    expect(scheduled).toHaveBeenCalledTimes(1);
+  });
+
   it("starts the scheduler at once when the plugin is enabled after startup", async () => {
     const { plugin } = await load({ layoutReady: true, data: PERIODIC });
     const scheduled = jest.spyOn(plugin.runner, "syncScheduled").mockResolvedValue();

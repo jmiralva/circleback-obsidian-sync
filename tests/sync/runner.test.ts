@@ -6,6 +6,7 @@ import type { AccountResult, FullSyncSignal, RunResult, SyncEngine } from "../..
 import { SYNC_OFF_TEXT } from "../../src/ui/status";
 import { logger } from "../../src/util/logger";
 import type { DuplicateGroup } from "../../src/vault/duplicates";
+import { deferred } from "../harness/deferred";
 import { createFakeApp } from "../harness/fakeApp";
 
 const A: AccountConfig = { id: "a", label: "Work", selfNameOverride: "" };
@@ -33,14 +34,6 @@ function dupes(count: number): DuplicateGroup[] {
   return Array.from({ length: count }, (_, i) => ({ id: `m${i}`, kind: "note", keep: {}, others: [{}] }) as unknown as DuplicateGroup);
 }
 
-function deferred(): { promise: Promise<void>; resolve: () => void } {
-  let resolve: () => void = () => undefined;
-  const promise = new Promise<void>((done) => {
-    resolve = done;
-  });
-  return { promise, resolve };
-}
-
 interface Setup {
   runner: SyncRunner;
   engine: { sync: jest.Mock<Promise<RunResult | "busy">, []>; fullSync: jest.Mock<Promise<RunResult | "busy">, [(done: number) => void, FullSyncSignal]> };
@@ -50,6 +43,8 @@ interface Setup {
   notices: string[];
   statusChanges: { count: number };
   readiness: { isReady: boolean; whenReady: jest.Mock<Promise<void>, []> };
+  /** What the runner's `notify` and `onStatusChange` do. A test may replace them, for instance to make one throw. */
+  hooks: { notify: (message: string) => void; onStatusChange: () => void };
 }
 
 function setup(opts: { accounts?: AccountConfig[]; withKeys?: string[]; settings?: Partial<CirclebackSyncSettings>; ready?: boolean } = {}): Setup {
@@ -65,18 +60,24 @@ function setup(opts: { accounts?: AccountConfig[]; withKeys?: string[]; settings
   const notices: string[] = [];
   const statusChanges = { count: 0 };
   const readiness = { isReady: opts.ready ?? true, whenReady: jest.fn(() => Promise.resolve()) };
+  const hooks: Setup["hooks"] = {
+    notify: (message) => {
+      notices.push(message);
+    },
+    onStatusChange: () => {
+      statusChanges.count += 1;
+    },
+  };
   const runner = new SyncRunner({
     engine: engine as unknown as Pick<SyncEngine, "sync" | "fullSync">,
     settings: () => settings,
     keys,
     device,
     readiness,
-    notify: (message) => notices.push(message),
-    onStatusChange: () => {
-      statusChanges.count += 1;
-    },
+    notify: (message) => hooks.notify(message),
+    onStatusChange: () => hooks.onStatusChange(),
   });
-  return { runner, engine, device, keys, settings, notices, statusChanges, readiness };
+  return { runner, engine, device, keys, settings, notices, statusChanges, readiness, hooks };
 }
 
 describe("SyncRunner.syncNow", () => {
@@ -183,7 +184,7 @@ describe("SyncRunner.syncNow", () => {
     await runner.syncNow();
     expect(notices).toEqual([
       'Circleback Sync: "Personal" stopped syncing because the API key was not accepted. Check its API key in the plugin settings.',
-      "Circleback Sync: everything is up to date. 1 account could not sync; see the status bar.",
+      "Circleback Sync: no meetings updated. 1 account could not sync; see the status bar.",
     ]);
 
     // Still failing: no second notice about the account stopping.
@@ -395,7 +396,7 @@ describe("SyncRunner.syncScheduled", () => {
     expect(notices).toEqual([CRASHED, CRASHED]);
   });
 
-  it("does not let a manual run that threw count as the scheduled run's first failure", async () => {
+  it("stays silent about a scheduled failure that follows a manual run that threw", async () => {
     const { runner, engine, notices } = setup();
     engine.sync.mockRejectedValue(new Error("broken"));
 
@@ -404,6 +405,167 @@ describe("SyncRunner.syncScheduled", () => {
 
     // The manual run always tells the user; the scheduled one follows a run that threw.
     expect(notices).toEqual([CRASHED]);
+  });
+});
+
+describe("SyncRunner thrown errors in a resumed full sync", () => {
+  /** A full sync that Obsidian closed on: account a is marked unfinished. */
+  function interrupted(): Setup {
+    const made = setup();
+    made.device.update("a", { fullSyncActive: true, fullSyncCursor: "https://circleback.ai/api/meetings?cursor=2" });
+    made.engine.fullSync.mockRejectedValue(new Error("resume broke"));
+    return made;
+  }
+
+  it("tells the user once when a resumed full sync keeps throwing, not every interval", async () => {
+    const { runner, notices } = interrupted();
+
+    await runner.syncScheduled();
+    expect(notices).toEqual([RESUMING, CRASHED]);
+
+    // The scheduler tries again each interval and it throws again: nothing more to say.
+    notices.length = 0;
+    await runner.syncScheduled();
+    await runner.syncScheduled();
+    expect(notices).toEqual([]);
+  });
+
+  it("tells the user again after a run that did not throw", async () => {
+    const { runner, engine, notices } = interrupted();
+    await runner.syncScheduled();
+    engine.fullSync.mockResolvedValueOnce(run({ a: ok({ written: 1 }) }));
+    await runner.syncScheduled();
+    notices.length = 0;
+
+    engine.fullSync.mockRejectedValue(new Error("broke again"));
+    await runner.syncScheduled();
+
+    expect(notices).toEqual([RESUMING, CRASHED]);
+  });
+
+  it("always tells the user when a full sync they started, or Sync now, throws", async () => {
+    const full = setup();
+    full.engine.fullSync.mockRejectedValue(new Error("broke"));
+    await full.runner.startFullSync();
+    await full.runner.startFullSync();
+    expect(full.notices).toEqual([FULL_STARTED, CRASHED, FULL_STARTED, CRASHED]);
+
+    const now = setup();
+    now.engine.sync.mockRejectedValue(new Error("broke"));
+    await now.runner.syncNow();
+    await now.runner.syncNow();
+    expect(now.notices).toEqual([CRASHED, CRASHED]);
+  });
+
+  it("stays silent about busy, like any scheduled run", async () => {
+    const { runner, engine, notices } = interrupted();
+    engine.fullSync.mockResolvedValue("busy");
+
+    await runner.syncScheduled();
+
+    expect(notices).toEqual([RESUMING]);
+  });
+});
+
+describe("SyncRunner when something around a run throws", () => {
+  it("is free to run again after the start notice of a full sync throws", async () => {
+    const { runner, engine, hooks, notices } = setup();
+    let first = true;
+    hooks.notify = (message) => {
+      if (first) {
+        first = false;
+        throw new Error("the notice failed");
+      }
+      notices.push(message);
+    };
+
+    await expect(runner.startFullSync()).resolves.toBeUndefined();
+
+    expect(runner.fullSyncProgress).toBeNull();
+    engine.sync.mockResolvedValue(run({ a: ok({ written: 1 }) }));
+    await runner.syncNow();
+    expect(engine.sync).toHaveBeenCalledTimes(1);
+    expect(notices).toContain("Circleback Sync: 1 meeting updated.");
+    // Cancel finds no full sync left behind.
+    notices.length = 0;
+    runner.cancelFullSync();
+    expect(notices).toEqual(["Circleback Sync: no full sync is running."]);
+  });
+
+  it("is free to run again after the first status refresh of a full sync throws", async () => {
+    const { runner, engine, hooks } = setup();
+    let first = true;
+    hooks.onStatusChange = () => {
+      if (first) {
+        first = false;
+        throw new Error("the status bar failed");
+      }
+    };
+
+    await expect(runner.startFullSync()).resolves.toBeUndefined();
+
+    expect(runner.fullSyncProgress).toBeNull();
+    await runner.syncNow();
+    expect(engine.sync).toHaveBeenCalledTimes(1);
+  });
+
+  it("is free to run again after reading the device state before the run throws", async () => {
+    const { runner, engine, device } = setup();
+    jest.spyOn(device, "account").mockImplementationOnce(() => {
+      throw new Error("device state unreadable");
+    });
+
+    await expect(runner.syncNow()).resolves.toBeUndefined();
+
+    expect(engine.sync).not.toHaveBeenCalled();
+    await runner.syncNow();
+    expect(engine.sync).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("SyncRunner public methods", () => {
+  it("never reject: a failure anywhere is logged instead", async () => {
+    const waiting = setup({ ready: false });
+    waiting.readiness.whenReady.mockRejectedValue(new Error("readiness failed"));
+    await expect(waiting.runner.syncNow()).resolves.toBeUndefined();
+    await expect(waiting.runner.startFullSync()).resolves.toBeUndefined();
+    expect(logger.dump()).toContain("readiness failed");
+
+    // The notice that reports the result throws.
+    const reporting = setup();
+    reporting.engine.sync.mockResolvedValue(run({ a: ok({ written: 1 }) }));
+    reporting.hooks.notify = () => {
+      throw new Error("could not show the result");
+    };
+    await expect(reporting.runner.syncNow()).resolves.toBeUndefined();
+    await expect(reporting.runner.syncScheduled()).resolves.toBeUndefined();
+    expect(logger.dump()).toContain("could not show the result");
+
+    // The status refresh at the very end throws.
+    const refreshing = setup();
+    refreshing.hooks.onStatusChange = () => {
+      throw new Error("could not refresh the status");
+    };
+    await expect(refreshing.runner.syncNow()).resolves.toBeUndefined();
+    expect(logger.dump()).toContain("could not refresh the status");
+
+    // Settings that cannot be read.
+    const unreadable = setup();
+    unreadable.settings.accounts = null as unknown as AccountConfig[];
+    await expect(unreadable.runner.syncScheduled()).resolves.toBeUndefined();
+    await expect(unreadable.runner.syncNow()).resolves.toBeUndefined();
+  });
+
+  it("do not throw: cancelling logs a notice that fails to show, and stopping for unload says nothing", () => {
+    const { runner, engine, hooks } = setup();
+    hooks.notify = () => {
+      throw new Error("could not show the notice");
+    };
+
+    expect(() => runner.cancelFullSync()).not.toThrow();
+    expect(() => runner.stopForUnload()).not.toThrow();
+    expect(engine.fullSync).not.toHaveBeenCalled();
+    expect(logger.dump()).toContain("could not show the notice");
   });
 });
 
@@ -542,8 +704,10 @@ describe("SyncRunner full sync", () => {
     const { runner, engine, notices, statusChanges } = setup();
     const gate = deferred();
     let signal: FullSyncSignal | null = null;
+    let report: (done: number) => void = () => undefined;
     engine.fullSync.mockImplementation(async (onProgress, given) => {
       signal = given;
+      report = onProgress;
       onProgress(1);
       await gate.promise;
       return run({ a: ok({ written: 1 }) });
@@ -556,13 +720,38 @@ describe("SyncRunner full sync", () => {
     runner.stopForUnload();
     expect(signal).toEqual({ cancelled: false, stopped: true });
     const changesBefore = statusChanges.count;
+    // Still going for a moment: the engine reports the meeting it was on, then finishes.
+    report(2);
     gate.resolve();
     await pending;
 
-    // No notice, but the progress is gone and the status is refreshed like at any other end.
+    // The plugin is gone: no notice and no status refresh, but the progress does not stay behind.
     expect(notices).toEqual([]);
+    expect(statusChanges.count).toBe(changesBefore);
     expect(runner.fullSyncProgress).toBeNull();
-    expect(statusChanges.count).toBe(changesBefore + 1);
+  });
+
+  it("stopForUnload also silences a normal sync that is still going, which finishes its work", async () => {
+    const { runner, engine, notices, statusChanges, device } = setup();
+    const gate = deferred();
+    engine.sync.mockImplementation(async () => {
+      await gate.promise;
+      device.update("a", { lastSuccessAt: "2026-10-27T15:00:00.000Z" });
+      return run({ a: ok({ written: 2 }) }, dupes(2));
+    });
+    const pending = runner.syncNow();
+    await Promise.resolve();
+    await Promise.resolve();
+    const changesBefore = statusChanges.count;
+
+    runner.stopForUnload();
+    gate.resolve();
+    await pending;
+
+    // The engine's work was done; the user is not told, and the status bar is not touched.
+    expect(device.account("a").lastSuccessAt).toBe("2026-10-27T15:00:00.000Z");
+    expect(notices).toEqual([]);
+    expect(statusChanges.count).toBe(changesBefore);
   });
 
   it("stopForUnload does nothing when no full sync is running", () => {
@@ -604,6 +793,23 @@ describe("SyncRunner.statusText", () => {
   it("says sync is off when it is off on this device and there is an account", () => {
     const { runner, device } = setup();
     device.syncOnThisDevice = false;
+    expect(runner.statusText()).toBe(SYNC_OFF_TEXT);
+  });
+
+  it("keeps showing full sync progress when sync on this device is switched off mid-run", async () => {
+    const { runner, engine, device } = setup();
+    const midRun: string[] = [];
+    engine.fullSync.mockImplementation(async (onProgress) => {
+      onProgress(4);
+      device.syncOnThisDevice = false;
+      midRun.push(runner.statusText());
+      return run({ a: ok() });
+    });
+
+    await runner.startFullSync();
+
+    expect(midRun).toEqual(["Circleback: full sync 4"]);
+    // Once the full sync is over, the status bar says sync is off.
     expect(runner.statusText()).toBe(SYNC_OFF_TEXT);
   });
 
