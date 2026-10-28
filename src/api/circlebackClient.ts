@@ -47,7 +47,17 @@ export class CirclebackClient {
 
     const { body, headers } = await this.#http.getJson(cursorUrl ?? "/meetings", wanted.join("&"));
     const meetings = validate(MeetingListSchema, body, "/meetings");
-    return { meetings, nextUrl: parseNextLink(getHeader(headers, "Link")) };
+    const next = readNextLink(getHeader(headers, "Link"));
+    // Treating a header that cannot be read as "no next page" would end the sync early
+    // without a word, and the older meetings would never arrive.
+    if (next.kind === "unreadable") {
+      throw new CirclebackError(
+        "invalid-response",
+        "Circleback's answer from /meetings has a Link header that cannot be read, so the next page cannot be found. " +
+          "Circleback may have changed its API; look for a plugin update.",
+      );
+    }
+    return { meetings, nextUrl: next.kind === "next" ? next.url : null };
   }
 
   /**
@@ -142,25 +152,37 @@ interface LinkValue {
   params: [name: string, value: string][];
 }
 
-/**
- * The URL of the `rel="next"` link in a `Link` header (RFC 8288), as an absolute URL.
- * Relative URLs resolve against the Circleback site. Returns null when the header is
- * missing, has no next link, or cannot be read.
- */
-export function parseNextLink(linkHeader: string | undefined): string | null {
+/** What a `Link` header says about the next page. */
+type NextLink =
+  | { kind: "none" } // no header, or a readable one without a next link: the last page
+  | { kind: "next"; url: string }
+  | { kind: "unreadable" }; // a header that is there but cannot be read, or whose next URL cannot be resolved
+
+function readNextLink(linkHeader: string | undefined): NextLink {
   const links = linkHeader === undefined ? [] : parseLinkHeader(linkHeader);
-  if (links === null) return null;
+  if (links === null) return { kind: "unreadable" };
   for (const link of links) {
     // Only the first `rel` counts, and it may list several relation types.
     const rel = link.params.find(([name]) => name === "rel");
     if (rel === undefined || !rel[1].toLowerCase().split(/\s+/).includes("next")) continue;
     try {
-      return new URL(link.target, SITE_ORIGIN).href;
+      return { kind: "next", url: new URL(link.target, SITE_ORIGIN).href };
     } catch {
-      return null;
+      return { kind: "unreadable" };
     }
   }
-  return null;
+  return { kind: "none" };
+}
+
+/**
+ * The URL of the `rel="next"` link in a `Link` header (RFC 8288), as an absolute URL.
+ * Relative URLs resolve against the Circleback site. Returns null when the header is
+ * missing, has no next link, or cannot be read. `listMeetingsPage` tells the last of
+ * those apart from the others, because a header it cannot read must not pass as a last page.
+ */
+export function parseNextLink(linkHeader: string | undefined): string | null {
+  const next = readNextLink(linkHeader);
+  return next.kind === "next" ? next.url : null;
 }
 
 /** Reads `<url>; name=value; name="value", <url>; ...`. Returns null if any part is malformed. */

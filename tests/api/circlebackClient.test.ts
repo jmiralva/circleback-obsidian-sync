@@ -166,6 +166,53 @@ describe("CirclebackClient.listMeetingsPage", () => {
     expect((await onlyPrev.client.listMeetingsPage({ ownership: "Mine" })).nextUrl).toBeNull();
   });
 
+  describe("a Link header it cannot rely on", () => {
+    it.each([
+      ["a header that is not a link", "https://evil.example/leak?cursor=SECRET-CURSOR"],
+      ["an unterminated URL", '</api/meetings?cursor=SECRET-CURSOR; rel="next"'],
+      ["a next link whose URL cannot be resolved", '<http://[SECRET-CURSOR>; rel="next"'],
+      ["a link followed by garbage", '</api/meetings?cursor=SECRET-CURSOR>; rel="next" garbage'],
+      ["an unterminated quote", '</api/meetings?cursor=a>; rel="next; title=SECRET-CURSOR'],
+    ])("throws invalid-response for %s instead of ending the sync as if it were the last page", async (_label, link) => {
+      const { client } = setup({ status: 200, headers: { Link: link }, body: meetingsPage() });
+      const error = await failure(client.listMeetingsPage({ ownership: "Mine" }));
+      expect(error.kind).toBe("invalid-response");
+      expect(error.message).toContain("/meetings");
+      expect(error.message).toContain("Link header");
+      expect(error.message).not.toContain("SECRET-CURSOR");
+      expect(error.message).not.toContain("evil.example");
+    });
+
+    it("throws when the header is unreadable on a cursor page too, whatever the header is named", async () => {
+      const { client } = setup({ status: 200, headers: { link: "garbage" }, body: meetingsPage() });
+      const error = await failure(
+        client.listMeetingsPage({ ownership: "Mine", cursorUrl: "https://circleback.ai/api/meetings?cursor=abc" }),
+      );
+      expect(error.kind).toBe("invalid-response");
+    });
+
+    it("gives nextUrl null for a well-formed header with only rel=prev", async () => {
+      const { client } = setup({
+        status: 200,
+        headers: { Link: '</api/meetings?cursor=p>; rel="prev", </api/meetings?cursor=f>; rel="first"' },
+        body: meetingsPage(),
+      });
+      const result = await client.listMeetingsPage({ ownership: "Mine" });
+      expect(result.nextUrl).toBeNull();
+      expect(result.meetings).toHaveLength(meetingsPage().length);
+    });
+
+    it.each([["an empty header", ""], ["a blank header", "   "]])("treats %s as the last page", async (_label, link) => {
+      const { client } = setup({ status: 200, headers: { Link: link }, body: meetingsPage() });
+      expect((await client.listMeetingsPage({ ownership: "Mine" })).nextUrl).toBeNull();
+    });
+
+    it("still returns null from parseNextLink for every one of these headers", () => {
+      expect(parseNextLink("https://evil.example/leak")).toBeNull();
+      expect(parseNextLink('<http://[bad>; rel="next"')).toBeNull();
+    });
+  });
+
   it("returns an empty page", async () => {
     const { client } = setup({ status: 200, body: [] });
     expect(await client.listMeetingsPage({ ownership: "Mine" })).toEqual({ meetings: [], nextUrl: null });
