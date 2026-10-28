@@ -1,0 +1,57 @@
+# Builds the plugin when a version tag is pushed and prepares a draft GitHub release for it.
+# The release is a draft on purpose: review it, then publish it by hand.
+#
+# Obsidian needs the release tag to equal the plugin version in manifest.json, with no "v" prefix.
+# To release: set the version in manifest.json, package.json and versions.json, commit, then
+# push a tag with exactly that version, for example 0.1.0.
+name: Release
+
+on:
+  push:
+    tags:
+      - "*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Check the tag matches the version in manifest.json
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          VERSION="$(node -p "require('./manifest.json').version")"
+          if [ "$TAG" != "$VERSION" ]; then
+            echo "The tag \"$TAG\" does not match the version \"$VERSION\" in manifest.json." >&2
+            echo "Obsidian needs the release tag to equal the version, with no v prefix." >&2
+            exit 1
+          fi
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run the tests
+        run: npm test
+
+      - name: Run the linter
+        run: npm run lint
+
+      - name: Build the plugin
+        run: npm run build
+
+      - name: Create a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" --draft --title "$TAG" main.js manifest.json styles.css
