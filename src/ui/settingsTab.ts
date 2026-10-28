@@ -2,24 +2,38 @@
 // settingsEdits.ts, what the page says and shows in settingsView.ts, and which settings need a
 // full sync in outputSettings.ts, all of which have tests. This file needs a DOM, so it has none.
 //
-// Saving: toggles and dropdowns save at once. Text and number fields save through one 500 ms
-// debounce, so typing does not write data.json on every key, and the tab flushes it before it
-// redraws, starts a sync, or closes. Every save waits for the one before it, so two edits made
-// close together cannot overwrite each other.
+// Saving is in settingsSaver.ts: toggles and dropdowns save at once, text and number fields once
+// typing pauses, and the tab asks the saver to save what is waiting before it redraws, starts a
+// sync, or closes.
 import { Notice, PluginSettingTab, Setting, debounce } from "obsidian";
-import type { App, ButtonComponent, TFile } from "obsidian";
+import type { App, ButtonComponent, TFile, TextComponent } from "obsidian";
 import type CirclebackSyncPlugin from "../main";
 import type { AccountConfig, CirclebackSyncSettings } from "../settings/types";
 import { logger } from "../util/logger";
 import type { Kind } from "../vault/meetingIndex";
-import { LOGS_COPIED, LOGS_NOT_COPIED, OUTPUT_CHANGE_NOTICE, SETTINGS_NOT_SAVED } from "./notices";
-import { changedOutputSettings } from "./outputSettings";
+import { clearKey, commitKey, testKey } from "./accountKeys";
+import type { KeyChange } from "./accountKeys";
+import {
+  KEY_NOT_SAVED,
+  LOGS_COPIED,
+  LOGS_NOT_COPIED,
+  OUTPUT_CHANGE_NOTICE,
+  SETTINGS_NOT_SAVED,
+} from "./notices";
+import { RemoveAccountModal } from "./removeAccountModal";
 import { addAccount, parseWholeNumber, removeAccount, trimFolder, updateAccount, withField } from "./settingsEdits";
-import { accountStatusLine, checkConnection, fullSyncDescription, settingsVisibility } from "./settingsView";
+import { SettingsSaver } from "./settingsSaver";
+import type { Edit } from "./settingsSaver";
+import {
+  REMOVE_ACCOUNT_TEXT,
+  fullSyncButtonText,
+  fullSyncDescription,
+  keyRowView,
+  settingsVisibility,
+} from "./settingsView";
 import type { SettingsVisibility } from "./settingsView";
 
 type Settings = CirclebackSyncSettings;
-type Edit = (settings: Settings) => Settings;
 
 // The settings of one kind, so that a control can only be given a setting it can hold.
 type FieldOf<T> = { [K in keyof Settings]: Settings[K] extends T ? K : never }[keyof Settings];
@@ -35,7 +49,6 @@ const NO_DUPLICATES = "No duplicates found in the last sync on this device.";
 // Kept as constants, not inline, so the sentence case check does not lowercase the brand name.
 const SELF_NAME_DESC =
   "Your name as it should appear in transcripts. Leave empty to use the name Circleback has for you.";
-const KEY_PLACEHOLDER = "Paste your Circleback API key";
 
 const NOTE_VARIABLES = "{title}, {date} (2026-10-27), {time} (13-45-00), {year}, {month}, {day} and {quarter} (Q4)";
 // A folder has no title to use.
@@ -62,47 +75,57 @@ const DUPLICATE_KINDS: Record<Kind, string> = {
 // Obsidian 1.13 prefers declarative setting definitions (`getSettingDefinitions`) to `display`, but
 // this plugin supports 1.11.4 (manifest.json), which has only `display`.
 export class CirclebackSettingTab extends PluginSettingTab {
-  /** The settings as they were when the tab opened, to tell at close which output settings changed. */
-  private opened: Settings | null = null;
-  /** Text and number edits waiting for the debounce; applied together in one save. */
-  private queued: Edit[] = [];
-  /** The last save. Each new save waits for it, and it never rejects. */
-  private saving: Promise<void> = Promise.resolve();
+  private readonly saver: SettingsSaver;
   /** What "Test connection" said for each account, kept across redraws until the tab closes. */
   private readonly testResults = new Map<string, string>();
-  private readonly flushQueued = debounce(() => this.applyQueued(), SAVE_DELAY_MS, true);
+  /** The full sync button on the page now, so it can follow the sync without a redraw. */
+  private fullSyncButton: ButtonComponent | null = null;
 
   constructor(
     app: App,
     private readonly plugin: CirclebackSyncPlugin,
   ) {
     super(app, plugin);
+    this.saver = new SettingsSaver({
+      store: plugin.settingsStore,
+      debounce: (callback) => debounce(callback, SAVE_DELAY_MS, true),
+      onSaveError: () => {
+        new Notice(SETTINGS_NOT_SAVED);
+      },
+      onOutputChanged: () => this.showOutputNotice(),
+    });
   }
 
   display(): void {
+    this.saver.open();
     this.render();
   }
 
   /** Saves what is pending, then tells the user if a setting that shapes the notes changed. */
   hide(): void {
-    const before = this.opened;
-    this.opened = null;
+    super.hide();
     this.testResults.clear();
-    this.flushQueued.run();
-    // The saves are asynchronous: the changed settings are only in place once they finish.
-    void this.saving.then(() => {
-      if (before === null) return;
-      if (changedOutputSettings(before, this.plugin.settingsStore.current).length > 0) this.showOutputNotice();
-    });
+    this.fullSyncButton = null;
+    void this.saver.close();
   }
 
-  /** Builds the page from the current settings. Also the redraw after a change that adds or removes settings. */
+  /** Called whenever the plugin's status changes, which includes a full sync starting and ending. */
+  refreshFullSyncButton(): void {
+    if (!this.saver.isOpen || this.fullSyncButton === null) return;
+    this.fullSyncButton.setButtonText(fullSyncButtonText(this.fullSyncRunning()));
+  }
+
+  private fullSyncRunning(): boolean {
+    return this.plugin.runner.fullSyncProgress !== null;
+  }
+
+  /** Builds the page from the current settings. Nothing is built while the tab is closed. */
   private render(): void {
+    if (!this.saver.isOpen) return;
     const { containerEl } = this;
     const scroll = containerEl.scrollTop;
     containerEl.empty();
     const settings = this.plugin.settingsStore.current;
-    this.opened ??= { ...settings };
     const show = settingsVisibility(settings);
 
     this.accountsGroup(containerEl, settings);
@@ -114,6 +137,12 @@ export class CirclebackSettingTab extends PluginSettingTab {
     this.advancedGroup(containerEl, settings);
     // Without this a redraw jumps back to the top.
     containerEl.scrollTop = scroll;
+  }
+
+  /** Saves what is waiting and then redraws, so that no field shows a value older than what was typed. */
+  private async redraw(): Promise<void> {
+    await this.saver.flush();
+    this.render();
   }
 
   // ---- Groups, in the order of the spec ----
@@ -137,7 +166,6 @@ export class CirclebackSettingTab extends PluginSettingTab {
   private accountBlock(el: HTMLElement, account: AccountConfig): void {
     const block = el.createDiv({ cls: "circleback-sync-account" });
     const { id } = account;
-    const hasKey = this.plugin.keys.get(id) !== null;
 
     let label = account.label;
     new Setting(block)
@@ -149,24 +177,50 @@ export class CirclebackSettingTab extends PluginSettingTab {
           // An account with no label could not be told apart in the status bar.
           if (trimmed === "") return;
           label = trimmed;
-          this.editLater((current) => updateAccount(current, id, { label: trimmed }));
+          this.saver.later((current) => updateAccount(current, id, { label: trimmed }));
         });
         text.inputEl.addEventListener("change", () => {
           if (text.inputEl.value.trim() === "") text.inputEl.value = label;
         });
       });
 
-    new Setting(block)
-      .setName("API key")
-      .setDesc(accountStatusLine(hasKey, this.plugin.device.account(id)))
-      .addText((text) => {
-        text.inputEl.type = "password";
-        text.inputEl.autocomplete = "off";
-        // The stored key is never shown, so the field is empty until something is pasted.
-        text.setPlaceholder(hasKey ? "Stored on this device" : KEY_PLACEHOLDER);
-        // `change` fires on Enter or when the field loses focus, not on every key press.
-        text.inputEl.addEventListener("change", () => this.saveKey(id, text.inputEl));
-      });
+    // The key row changes in place when the key changes. A redraw would replace the button the user
+    // is clicking: leaving the field fires `change`, which comes before the click on the next control.
+    const keyRow: { text: TextComponent | null; clear: ButtonComponent | null } = { text: null, clear: null };
+    const keySetting = new Setting(block).setName("API key");
+    keySetting.addText((text) => {
+      keyRow.text = text;
+      text.inputEl.type = "password";
+      text.inputEl.autocomplete = "off";
+      // `change` fires on Enter or when the field loses focus, not on every key press.
+      text.inputEl.addEventListener("change", () => showKeyChange(commitKey(this.plugin, id, text.inputEl.value)));
+    });
+    keySetting.addButton((button) => {
+      keyRow.clear = button;
+      button.setButtonText("Clear key").onClick(() => showKeyChange(clearKey(this.plugin, id)));
+    });
+    const showKey = (): void => {
+      // The stored key is never shown: the field is empty until something is pasted.
+      const view = keyRowView(this.plugin.keys.get(id) !== null, this.plugin.device.account(id));
+      keySetting.setDesc(view.status);
+      keyRow.text?.setPlaceholder(view.placeholder);
+      if (view.canClear) keyRow.clear?.buttonEl.show();
+      else keyRow.clear?.buttonEl.hide();
+    };
+    const showKeyChange = (change: KeyChange): void => {
+      if (!change.ok) {
+        // The field keeps what was typed, so the user can try again.
+        new Notice(KEY_NOT_SAVED);
+        return;
+      }
+      keyRow.text?.setValue("");
+      // The result belongs to the old key.
+      this.testResults.delete(id);
+      resultEl.setText("");
+      this.plugin.refreshStatus();
+      showKey();
+    };
+    showKey();
 
     new Setting(block)
       .setName("Test connection")
@@ -184,18 +238,18 @@ export class CirclebackSettingTab extends PluginSettingTab {
       .setDesc(SELF_NAME_DESC)
       .addText((text) =>
         text.setValue(account.selfNameOverride).onChange((value) => {
-          this.editLater((current) => updateAccount(current, id, { selfNameOverride: value.trim() }));
+          this.saver.later((current) => updateAccount(current, id, { selfNameOverride: value.trim() }));
         }),
       );
 
     new Setting(block)
       .setName("Remove account")
-      .setDesc("Removes the account and its API key from this device. Its notes stay in the vault.")
+      .setDesc(REMOVE_ACCOUNT_TEXT)
       .addButton((button) => {
         // What `setWarning` does; that method is deprecated from Obsidian 1.13, and 1.11.4 is supported.
         button.buttonEl.addClass("mod-warning");
         button.setButtonText("Remove").onClick(() => {
-          void this.removeAccountAndKey(id);
+          void this.confirmRemove(id);
         });
       });
   }
@@ -404,15 +458,16 @@ export class CirclebackSettingTab extends PluginSettingTab {
 
   private advancedGroup(el: HTMLElement, settings: Settings): void {
     new Setting(el).setName("Advanced").setHeading();
-    const running = this.plugin.runner.fullSyncProgress !== null;
     new Setting(el)
       .setName("Full sync")
       .setDesc(fullSyncDescription(settings))
-      .addButton((button) =>
-        button.setButtonText(running ? "Cancel full sync" : "Start full sync").onClick(() => {
-          void this.toggleFullSync(running);
-        }),
-      );
+      .addButton((button) => {
+        this.fullSyncButton = button;
+        // What the click does depends on the sync at that moment, not on when the page was built.
+        button.setButtonText(fullSyncButtonText(this.fullSyncRunning())).onClick(() => {
+          void this.toggleFullSync();
+        });
+      });
     this.addToggle(
       el, settings, "debugLogging", "Debug logging",
       "Also print the plugin's log to the developer console. Its lines are at the Verbose level, so set the console to show Verbose. The log is kept in memory either way, for Copy logs.",
@@ -466,7 +521,7 @@ export class CirclebackSettingTab extends PluginSettingTab {
       .addText((text) =>
         text.setValue(settings[field]).onChange((value) => {
           const cleaned = clean(value);
-          this.editLater((current) => withField(current, field, cleaned));
+          this.saver.later((current) => withField(current, field, cleaned));
         }),
       );
   }
@@ -488,7 +543,7 @@ export class CirclebackSettingTab extends PluginSettingTab {
           const parsed = parseWholeNumber(value, min, max);
           if (parsed === null) return;
           accepted = parsed;
-          this.editLater((current) => withField(current, field, parsed));
+          this.saver.later((current) => withField(current, field, parsed));
         });
         text.inputEl.addEventListener("change", () => {
           if (parseWholeNumber(text.inputEl.value, min, max) === null) text.inputEl.value = String(accepted);
@@ -506,75 +561,38 @@ export class CirclebackSettingTab extends PluginSettingTab {
     if (kept) item.appendText(" (kept)");
   }
 
-  // ---- Saving ----
-
-  /** Saves the edit at once, after any text edits that are waiting, then redraws if asked. */
+  /** Saves an edit at once (after any text edits that are waiting), then redraws if asked. */
   private async commit(edit: Edit, redraw = false): Promise<void> {
-    this.flushQueued.run();
-    await this.enqueueSave(edit);
-    if (redraw) this.render();
-  }
-
-  /** Queues a text or number edit; the debounce saves it, together with any others, once typing pauses. */
-  private editLater(edit: Edit): void {
-    this.queued.push(edit);
-    this.flushQueued();
-  }
-
-  private applyQueued(): void {
-    const edits = this.queued;
-    this.queued = [];
-    if (edits.length === 0) return;
-    void this.enqueueSave((settings) => edits.reduce((next, edit) => edit(next), settings));
-  }
-
-  /** Saves what is queued and waits until every save so far has finished. */
-  private async flush(): Promise<void> {
-    this.flushQueued.run();
-    await this.saving;
-  }
-
-  /** Each edit is applied to the settings as they are when its turn comes, not as they were when it was made. */
-  private enqueueSave(edit: Edit): Promise<void> {
-    const { settingsStore } = this.plugin;
-    this.saving = this.saving.then(async () => {
-      try {
-        await settingsStore.save(edit(settingsStore.current));
-      } catch (error) {
-        logger.error("Could not save the settings.", error);
-        new Notice(SETTINGS_NOT_SAVED);
-      }
-    });
-    return this.saving;
+    await this.saver.commit(edit);
+    if (redraw) await this.redraw();
   }
 
   // ---- Actions ----
 
-  private saveKey(id: string, input: HTMLInputElement): void {
-    const { keys, device } = this.plugin;
-    // The key store does not trim, and a pasted key often has a space or a newline after it.
-    const value = input.value.trim();
-    if (value === "") keys.clear(id);
-    else keys.set(id, value);
-    // The cached owner belongs to the old key; a key for someone else must not keep their email.
-    device.update(id, { ownerEmail: undefined, ownerName: undefined });
-    input.value = "";
-    this.testResults.delete(id);
-    this.plugin.refreshStatus();
-    this.render();
-  }
-
   private async testConnection(id: string, button: ButtonComponent, resultEl: HTMLElement): Promise<void> {
     button.setDisabled(true);
     resultEl.setText("Testing the connection...");
+    const session = this.saver.session;
     try {
-      const outcome = await checkConnection(this.plugin.keys.get(id), (key) => this.plugin.clientFor(key));
-      if (outcome.email !== undefined) this.plugin.device.update(id, { ownerEmail: outcome.email });
-      this.testResults.set(id, outcome.text);
-      resultEl.setText(outcome.text);
+      // An answer for a key that has since changed, or for a tab that has since closed, is dropped.
+      const text = await testKey(this.plugin, id, () => this.saver.session === session);
+      if (text === null) return;
+      this.testResults.set(id, text);
+      resultEl.setText(text);
     } finally {
       button.setDisabled(false);
     }
+  }
+
+  /** Asks first: the account list is in data.json, so removing is removing on every device sharing the vault. */
+  private async confirmRemove(id: string): Promise<void> {
+    // A label typed a moment ago should be the one in the question.
+    await this.saver.flush();
+    const label = this.plugin.settingsStore.current.accounts.find((account) => account.id === id)?.label;
+    if (label === undefined) return;
+    new RemoveAccountModal(this.app, label, () => {
+      void this.removeAccountAndKey(id);
+    }).open();
   }
 
   private async removeAccountAndKey(id: string): Promise<void> {
@@ -582,19 +600,22 @@ export class CirclebackSettingTab extends PluginSettingTab {
     this.testResults.delete(id);
     await this.commit((current) => removeAccount(current, id));
     this.plugin.refreshStatus();
-    this.render();
+    await this.redraw();
   }
 
-  private async toggleFullSync(running: boolean): Promise<void> {
-    if (running) {
-      this.plugin.runner.cancelFullSync();
-    } else {
-      // The sync reads the settings when it starts, so an edit still waiting must be saved first.
-      await this.flush();
-      void this.plugin.runner.startFullSync();
-    }
-    // The sync reports its progress a moment after it starts, so the button is redrawn after that.
-    window.setTimeout(() => this.render(), 100);
+  private async toggleFullSync(): Promise<void> {
+    if (this.fullSyncRunning()) this.plugin.runner.cancelFullSync();
+    else await this.startFullSync();
+    // The button follows the sync through `refreshFullSyncButton`, which the runner's status updates reach.
+  }
+
+  /** Starts a full sync, from the button or from the notice. */
+  private async startFullSync(): Promise<void> {
+    // The sync reads the settings when it starts, so edits still waiting are saved first. It also
+    // rewrites the notes for the changes made so far, so closing the tab must not offer a full sync
+    // for them again.
+    await this.saver.rebase();
+    void this.plugin.runner.startFullSync();
   }
 
   private async copyLogs(): Promise<void> {
@@ -613,7 +634,7 @@ export class CirclebackSettingTab extends PluginSettingTab {
       content.createDiv({ text: OUTPUT_CHANGE_NOTICE });
       const button = content.createEl("button", { text: "Run full sync", cls: "mod-cta circleback-sync-notice-button" });
       button.addEventListener("click", () => {
-        void this.plugin.runner.startFullSync();
+        void this.startFullSync();
         notice.hide();
       });
     });

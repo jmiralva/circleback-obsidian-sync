@@ -16,6 +16,7 @@ function withChange(key: keyof CirclebackSyncSettings): CirclebackSyncSettings {
 describe("OUTPUT_SETTINGS", () => {
   it("names the settings that change what is written to existing notes", () => {
     expect(OUTPUT_SETTINGS).toEqual([
+      "syncNotes",
       "syncTranscripts",
       "includePrivateNotes",
       "includeActionItems",
@@ -26,6 +27,7 @@ describe("OUTPUT_SETTINGS", () => {
       "subfolderPattern",
       "customSubfolderPattern",
       "filenamePattern",
+      "linkFromDailyNotes",
       "transcriptHandling",
       "customTranscriptBaseFolder",
       "transcriptSubfolderPattern",
@@ -66,6 +68,24 @@ describe("changedOutputSettings", () => {
     }
   });
 
+  it("flags the two settings that turn the notes or the daily note links off or on", () => {
+    expect(changedOutputSettings(DEFAULT_SETTINGS, { ...DEFAULT_SETTINGS, syncNotes: false })).toEqual(["syncNotes"]);
+    expect(changedOutputSettings(DEFAULT_SETTINGS, { ...DEFAULT_SETTINGS, linkFromDailyNotes: true })).toEqual([
+      "linkFromDailyNotes",
+    ]);
+  });
+
+  it("leaves the two daily note headings and creating missing daily notes out", () => {
+    const next = {
+      ...DEFAULT_SETTINGS,
+      dailyNoteLinkHeading: "## Links",
+      dailyNoteSectionHeading: "## Sections",
+      createMissingDailyNotes: "never" as const,
+    };
+
+    expect(changedOutputSettings(DEFAULT_SETTINGS, next)).toEqual([]);
+  });
+
   it("ignores edits to the account list", () => {
     const next = { ...DEFAULT_SETTINGS, accounts: [{ id: "a", label: "Work", selfNameOverride: "Jo" }] };
 
@@ -73,12 +93,30 @@ describe("changedOutputSettings", () => {
   });
 
   it("lists several changes in the order of OUTPUT_SETTINGS, not the order they were made", () => {
-    const next = { ...DEFAULT_SETTINGS, selfLabel: "name" as const, syncTranscripts: true, saveAs: "sections" as const };
+    const next = {
+      ...DEFAULT_SETTINGS,
+      selfLabel: "name" as const,
+      syncTranscripts: true,
+      saveAs: "sections" as const,
+      syncNotes: false,
+    };
 
-    expect(changedOutputSettings(DEFAULT_SETTINGS, next)).toEqual(["syncTranscripts", "saveAs", "selfLabel"]);
+    expect(changedOutputSettings(DEFAULT_SETTINGS, next)).toEqual(["syncNotes", "syncTranscripts", "saveAs", "selfLabel"]);
   });
 
-  it("returns nothing when a setting was changed and changed back", () => {
+  it("returns nothing for two equal copies of the settings", () => {
     expect(changedOutputSettings(DEFAULT_SETTINGS, { ...DEFAULT_SETTINGS })).toEqual([]);
+  });
+
+  it("returns nothing when a setting was changed and then changed back", () => {
+    const edited = { ...DEFAULT_SETTINGS, filenamePattern: "{date} {title}", includeInsights: false };
+    const reverted = {
+      ...edited,
+      filenamePattern: DEFAULT_SETTINGS.filenamePattern,
+      includeInsights: DEFAULT_SETTINGS.includeInsights,
+    };
+
+    expect(changedOutputSettings(DEFAULT_SETTINGS, edited)).toEqual(["includeInsights", "filenamePattern"]);
+    expect(changedOutputSettings(DEFAULT_SETTINGS, reverted)).toEqual([]);
   });
 });

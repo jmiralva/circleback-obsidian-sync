@@ -29,6 +29,7 @@ export const OUTPUT_CHANGE_NOTICE =
 export const SETTINGS_NOT_SAVED = "Circleback Sync: could not save the settings.";
 export const LOGS_COPIED = "Circleback Sync: logs copied. API keys are removed from them.";
 export const LOGS_NOT_COPIED = "Circleback Sync: could not copy the logs.";
+export const KEY_NOT_SAVED = "Circleback Sync: could not save the API key.";
 
 const REASONS: Record<AccountErrorKind, string> = {
   auth: "the API key was not accepted",
@@ -48,6 +49,12 @@ const HINTS: Partial<Record<AccountErrorKind, string>> = {
 };
 
 const DEFAULT_HINT = " It will try again at the next sync.";
+
+/** Whether a stored text is one of the error kinds, as state saved by an older or newer version might not be. */
+export function isAccountErrorKind(value: string): value is AccountErrorKind {
+  // Not `in`: that would also accept names every object has, such as "toString".
+  return Object.prototype.hasOwnProperty.call(REASONS, value);
+}
 
 /** Why an account stopped syncing, as a clause for "stopped syncing because ...". */
 export function reasonText(kind: AccountErrorKind): string {

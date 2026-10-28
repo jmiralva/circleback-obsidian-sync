@@ -3,11 +3,13 @@
 import type { CirclebackSyncSettings } from "../settings/types";
 
 /**
- * The settings that decide what a synced note or transcript contains or where it goes. A normal
- * sync only rewrites meetings in the sync window, so after one of these changes the older notes
- * stay as they were until a full sync.
+ * The settings that decide what a synced note or transcript contains or where it goes, and
+ * whether notes and daily note links are written at all. A normal sync only rewrites meetings in
+ * the sync window, so after one of these changes the older notes stay as they were until a full
+ * sync. The two daily note headings and "create missing daily notes" are left out on purpose.
  */
 export const OUTPUT_SETTINGS: (keyof CirclebackSyncSettings)[] = [
+  "syncNotes",
   "syncTranscripts",
   "includePrivateNotes",
   "includeActionItems",
@@ -18,6 +20,7 @@ export const OUTPUT_SETTINGS: (keyof CirclebackSyncSettings)[] = [
   "subfolderPattern",
   "customSubfolderPattern",
   "filenamePattern",
+  "linkFromDailyNotes",
   "transcriptHandling",
   "customTranscriptBaseFolder",
   "transcriptSubfolderPattern",

@@ -3,12 +3,19 @@ import type { ConnectionInfo } from "../../src/api/schemas";
 import { DEFAULT_SETTINGS } from "../../src/settings/types";
 import type { CirclebackSyncSettings } from "../../src/settings/types";
 import {
+  KEY_PLACEHOLDER,
+  KEY_STORED_PLACEHOLDER,
   NO_KEY_TO_TEST,
+  REMOVE_ACCOUNT_TEXT,
   accountStatusLine,
   checkConnection,
+  fullSyncButtonText,
   fullSyncDescription,
+  keyRowView,
+  removeAccountTitle,
   settingsVisibility,
 } from "../../src/ui/settingsView";
+import { logger } from "../../src/util/logger";
 
 function settings(changes: Partial<CirclebackSyncSettings> = {}): CirclebackSyncSettings {
   return { ...DEFAULT_SETTINGS, ...changes };
@@ -102,6 +109,89 @@ describe("checkConnection", () => {
     });
 
     expect(outcome).toEqual({ text: "Could not connect because of an unexpected error." });
+  });
+});
+
+describe("checkConnection logging", () => {
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("logs the error that made a test fail, so Copy logs has the detail", async () => {
+    const warn = jest.spyOn(logger, "warn");
+    const error = new CirclebackError("rate-limited", "Too many requests", 429);
+
+    await checkConnection("cb_key", () => ({ testConnection: () => Promise.reject(error) }));
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith("Test connection failed.", error);
+  });
+
+  it("logs an unexpected error too, and never lets a key into the log", async () => {
+    const warn = jest.spyOn(logger, "warn");
+
+    await checkConnection("cb_secret_key", () => ({
+      testConnection: () => Promise.reject(new Error("failed with cb_secret_key")),
+    }));
+
+    expect(warn).toHaveBeenCalledWith("Test connection failed.", expect.any(Error));
+    expect(logger.dump()).toContain("Test connection failed.");
+    expect(logger.dump()).not.toContain("cb_secret_key");
+  });
+
+  it("logs nothing when the test works or there is no key", async () => {
+    const warn = jest.spyOn(logger, "warn");
+
+    await checkConnection("cb_key", () => ({ testConnection: () => Promise.resolve({ email: "jo@example.com" }) }));
+    await checkConnection(null, () => ({ testConnection: () => Promise.resolve({ email: "jo@example.com" }) }));
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+});
+
+describe("keyRowView", () => {
+  it("offers to paste a key, and no way to clear one, when this device has none", () => {
+    expect(keyRowView(false, {})).toEqual({
+      status: "Key needed on this device",
+      placeholder: KEY_PLACEHOLDER,
+      canClear: false,
+    });
+    expect(KEY_PLACEHOLDER).toBe("Paste your Circleback API key");
+  });
+
+  it("says a key is stored, and offers to clear it, when this device has one", () => {
+    expect(keyRowView(true, { lastSuccessAt: "2026-10-27T15:42:00.000Z" })).toEqual({
+      status: "Last synced Oct 27, 10:42",
+      placeholder: KEY_STORED_PLACEHOLDER,
+      canClear: true,
+    });
+    expect(KEY_STORED_PLACEHOLDER).toBe("Stored on this device");
+  });
+
+  it("shows why an account stopped, when it has a key", () => {
+    expect(keyRowView(true, { failing: true, lastError: "auth" }).status).toBe(
+      "Stopped syncing because the API key was not accepted",
+    );
+  });
+});
+
+describe("removing an account", () => {
+  it("tells the user it is removed on every device that shares the vault", () => {
+    expect(REMOVE_ACCOUNT_TEXT).toBe(
+      "Removes the account on every device that shares this vault, and its API key from this device. Its notes stay in the vault.",
+    );
+  });
+
+  it("asks about the account by its label", () => {
+    expect(removeAccountTitle("Work")).toBe('Remove "Work"?');
+    expect(removeAccountTitle('The "big" one')).toBe('Remove "The "big" one"?');
+  });
+});
+
+describe("fullSyncButtonText", () => {
+  it("offers to cancel a full sync that is running and to start one otherwise", () => {
+    expect(fullSyncButtonText(true)).toBe("Cancel full sync");
+    expect(fullSyncButtonText(false)).toBe("Start full sync");
   });
 });
 

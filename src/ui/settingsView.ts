@@ -6,23 +6,12 @@ import type { ConnectionInfo } from "../api/schemas";
 import type { CirclebackSyncSettings } from "../settings/types";
 import type { AccountDeviceState } from "../state/deviceState";
 import type { AccountErrorKind } from "../sync/syncEngine";
-import { reasonText } from "./notices";
-
-// Typed as a record so that a new error kind cannot be forgotten here without a compile error.
-const ERROR_KINDS: Record<AccountErrorKind, true> = {
-  auth: true,
-  forbidden: true,
-  "rate-limited": true,
-  timeout: true,
-  network: true,
-  server: true,
-  "invalid-response": true,
-  unexpected: true,
-};
+import { logger } from "../util/logger";
+import { isAccountErrorKind, reasonText } from "./notices";
 
 /** An error kind from stored state, or "unexpected" when it is missing or not one this version knows. */
 function errorKind(stored: string | undefined): AccountErrorKind {
-  return stored !== undefined && Object.keys(ERROR_KINDS).includes(stored) ? (stored as AccountErrorKind) : "unexpected";
+  return stored !== undefined && isAccountErrorKind(stored) ? stored : "unexpected";
 }
 
 /**
@@ -41,6 +30,37 @@ export function accountStatusLine(hasKey: boolean, state: AccountDeviceState): s
 }
 
 export const NO_KEY_TO_TEST = "Enter an API key first.";
+export const KEY_PLACEHOLDER = "Paste your Circleback API key";
+export const KEY_STORED_PLACEHOLDER = "Stored on this device";
+
+/** What the account's API key row shows: the status line, the placeholder, and whether it offers "Clear key". */
+export interface KeyRowView {
+  status: string;
+  placeholder: string;
+  canClear: boolean;
+}
+
+/** The key row for an account, by whether this device has its key. The key itself is never shown. */
+export function keyRowView(hasKey: boolean, state: AccountDeviceState): KeyRowView {
+  return {
+    status: accountStatusLine(hasKey, state),
+    placeholder: hasKey ? KEY_STORED_PLACEHOLDER : KEY_PLACEHOLDER,
+    canClear: hasKey,
+  };
+}
+
+/** The account list is in data.json, so removing an account removes it everywhere the vault is shared. */
+export const REMOVE_ACCOUNT_TEXT =
+  "Removes the account on every device that shares this vault, and its API key from this device. Its notes stay in the vault.";
+
+export function removeAccountTitle(label: string): string {
+  return `Remove "${label}"?`;
+}
+
+/** The label of the full sync button: cancelling a running sync, or starting one. */
+export function fullSyncButtonText(running: boolean): string {
+  return running ? "Cancel full sync" : "Start full sync";
+}
 
 export interface ConnectionOutcome {
   /** What to show under the account. */
@@ -63,6 +83,8 @@ export async function checkConnection(
     const keyName = apiKeyName === undefined || apiKeyName === "" ? "" : ` with key "${apiKeyName}"`;
     return { text: `Connected as ${email}${keyName}`, email };
   } catch (error) {
+    // The user sees only the reason; the detail goes to the log, which redacts API keys.
+    logger.warn("Test connection failed.", error);
     const kind: AccountErrorKind = error instanceof CirclebackError ? error.kind : "unexpected";
     return { text: `Could not connect because ${reasonText(kind)}.` };
   }

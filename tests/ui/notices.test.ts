@@ -5,6 +5,7 @@ import {
   FULL_SYNC_RESUMING,
   FULL_SYNC_STARTED,
   FULL_SYNC_STOPPING,
+  KEY_NOT_SAVED,
   LOGS_COPIED,
   LOGS_NOT_COPIED,
   NO_FULL_SYNC,
@@ -14,6 +15,7 @@ import {
   SYNC_OFF_NOTICE,
   WAITING_FOR_VAULT,
   duplicateNotice,
+  isAccountErrorKind,
   reasonText,
   resultNotice,
   transitionNotices,
@@ -204,5 +206,31 @@ describe("fixed notices", () => {
     expect(SETTINGS_NOT_SAVED).toBe("Circleback Sync: could not save the settings.");
     expect(LOGS_COPIED).toBe("Circleback Sync: logs copied. API keys are removed from them.");
     expect(LOGS_NOT_COPIED).toBe("Circleback Sync: could not copy the logs.");
+    expect(KEY_NOT_SAVED).toBe("Circleback Sync: could not save the API key.");
+  });
+});
+
+describe("isAccountErrorKind", () => {
+  it("accepts every kind that has a reason", () => {
+    const kinds: AccountErrorKind[] = [
+      "auth",
+      "forbidden",
+      "rate-limited",
+      "timeout",
+      "network",
+      "server",
+      "invalid-response",
+      "unexpected",
+    ];
+    for (const kind of kinds) {
+      expect(isAccountErrorKind(kind)).toBe(true);
+      expect(typeof reasonText(kind)).toBe("string");
+    }
+  });
+
+  it("refuses anything else, including names that every object has", () => {
+    for (const value of ["", "Auth", "nope", "toString", "constructor", "__proto__", "hasOwnProperty"]) {
+      expect(isAccountErrorKind(value)).toBe(false);
+    }
   });
 });

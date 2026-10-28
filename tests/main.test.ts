@@ -158,6 +158,19 @@ describe("CirclebackSyncPlugin.onload", () => {
     expect(recorded.settingTabs[0]).toBeInstanceOf(CirclebackSettingTab);
   });
 
+  it("tells the open settings tab when the status changes, so its full sync button follows the sync", async () => {
+    const { plugin, recorded } = await load();
+    const tab = recorded.settingTabs[0] as CirclebackSettingTab;
+    const update = jest.spyOn(tab, "refreshFullSyncButton");
+
+    plugin.refreshStatus();
+    expect(update).toHaveBeenCalledTimes(1);
+
+    // A settings save also refreshes the status.
+    await plugin.settingsStore.save({ ...plugin.settingsStore.current, showSyncNotifications: false });
+    expect(update).toHaveBeenCalledTimes(2);
+  });
+
   it("starts the scheduler only after the layout is ready and the cache has resolved", async () => {
     const { app, plugin } = await load({ layoutReady: false, data: PERIODIC });
     const scheduled = jest.spyOn(plugin.runner, "syncScheduled").mockResolvedValue();

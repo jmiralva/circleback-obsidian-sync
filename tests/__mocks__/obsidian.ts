@@ -135,6 +135,35 @@ export class Plugin {
   }
 }
 
+// The parts of a modal the plugin uses. `open` and `close` run the same hooks Obsidian does.
+export class Modal {
+  contentEl: unknown = {};
+  titleEl: unknown = {};
+  title = "";
+  opened = false;
+
+  constructor(public app: App) {}
+
+  open(): void {
+    this.opened = true;
+    void this.onOpen();
+  }
+
+  close(): void {
+    this.opened = false;
+    this.onClose();
+  }
+
+  onOpen(): Promise<void> | void {}
+
+  onClose(): void {}
+
+  setTitle(title: string): this {
+    this.title = title;
+    return this;
+  }
+}
+
 export class PluginSettingTab {
   containerEl: unknown = {};
 

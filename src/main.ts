@@ -28,6 +28,7 @@ export default class CirclebackSyncPlugin extends Plugin {
 
   private syncRunner: SyncRunner | null = null;
   private statusEl: HTMLElement | null = null;
+  private settingTab: CirclebackSettingTab | null = null;
 
   /** Runs every sync; the commands, the scheduler and the settings tab all go through it. */
   get runner(): SyncRunner {
@@ -106,7 +107,8 @@ export default class CirclebackSyncPlugin extends Plugin {
       },
     });
 
-    this.addSettingTab(new CirclebackSettingTab(this.app, this));
+    this.settingTab = new CirclebackSettingTab(this.app, this);
+    this.addSettingTab(this.settingTab);
 
     // The first automatic sync comes a settle delay after this, not at once.
     void readiness.whenReady().then(() => scheduler.start());
@@ -124,13 +126,17 @@ export default class CirclebackSyncPlugin extends Plugin {
     await this.settingsStore.reloadFromDisk();
   }
 
-  /** Sets the status bar text from the current state; hides the item when there is nothing to say. */
+  /**
+   * Sets the status bar text from the current state; hides the item when there is nothing to say.
+   * The settings tab is told too, since a full sync starting or ending changes its button.
+   */
   refreshStatus(): void {
     if (this.statusEl === null || this.syncRunner === null) return;
     const text = this.syncRunner.statusText();
     this.statusEl.setText(text);
     if (text === "") this.statusEl.hide();
     else this.statusEl.show();
+    this.settingTab?.refreshFullSyncButton();
   }
 
   /** A Circleback client for one API key: the engine's factory, also used by "Test connection". */
