@@ -292,6 +292,25 @@ describe("FakeApp: app services", () => {
     app.workspace.onLayoutReady(ready);
     expect(ready).toHaveBeenCalledTimes(1);
   });
+
+  it("holds onLayoutReady callbacks until the layout is fired when it starts not ready", () => {
+    const app = createFakeApp({ layoutReady: false });
+    const ready = jest.fn();
+    expect(app.workspace.layoutReady).toBe(false);
+    app.workspace.onLayoutReady(ready);
+    expect(ready).not.toHaveBeenCalled();
+
+    app.workspace.fireLayoutReady();
+
+    expect(app.workspace.layoutReady).toBe(true);
+    expect(ready).toHaveBeenCalledTimes(1);
+    // Later callbacks run at once, and the first one is not run again.
+    const later = jest.fn();
+    app.workspace.onLayoutReady(later);
+    app.workspace.fireLayoutReady();
+    expect(later).toHaveBeenCalledTimes(1);
+    expect(ready).toHaveBeenCalledTimes(1);
+  });
 });
 
 // The real Plugin class is abstract in obsidian.d.ts; the mock is concrete.

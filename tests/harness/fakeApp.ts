@@ -13,12 +13,21 @@ export interface FakeAppOptions {
   files?: Record<string, string>;
   /** Markdown files that the metadata cache has not indexed yet (`getFileCache` returns null). */
   unindexed?: string[];
+  /**
+   * Whether the workspace layout is ready (default true, as for a plugin enabled after startup).
+   * When false, `onLayoutReady` callbacks wait until `workspace.fireLayoutReady()`.
+   */
+  layoutReady?: boolean;
 }
 
 export type FakeApp = App & {
   metadataCache: {
     /** Fires the "resolved" event, as Obsidian does when indexing settles. */
     fireResolved(): void;
+  };
+  workspace: {
+    /** Makes the layout ready and runs the callbacks that were waiting, as Obsidian does at startup. */
+    fireLayoutReady(): void;
   };
   /** Test helper: the current text of a file, indexed or not. Throws when it does not exist. */
   fileText(path: string): string;
@@ -354,6 +363,23 @@ class FakeMetadataCache {
   }
 }
 
+class FakeWorkspace {
+  private readonly waiting: Array<() => unknown> = [];
+
+  constructor(public layoutReady: boolean) {}
+
+  // Like Obsidian: runs at once when the layout is ready, otherwise once it becomes ready.
+  onLayoutReady(callback: () => unknown): void {
+    if (this.layoutReady) callback();
+    else this.waiting.push(callback);
+  }
+
+  fireLayoutReady(): void {
+    this.layoutReady = true;
+    for (const callback of this.waiting.splice(0)) callback();
+  }
+}
+
 class FakeFileManager {
   constructor(private readonly vault: FakeVault) {}
 
@@ -407,12 +433,7 @@ export function createFakeApp(opts: FakeAppOptions = {}): FakeApp {
     vault,
     metadataCache: new FakeMetadataCache(vault, new Set(opts.unindexed ?? [])),
     fileManager: new FakeFileManager(vault),
-    workspace: {
-      layoutReady: true,
-      onLayoutReady(callback: () => unknown): void {
-        callback();
-      },
-    },
+    workspace: new FakeWorkspace(opts.layoutReady ?? true),
     secretStorage: new FakeSecretStorage(),
     // Obsidian stores these as JSON strings in the browser's local storage.
     loadLocalStorage(key: string): unknown {

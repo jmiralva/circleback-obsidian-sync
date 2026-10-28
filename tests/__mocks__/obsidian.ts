@@ -23,10 +23,35 @@ export class Notice {
   hide(): void {}
 }
 
+// What `addStatusBarItem` hands back: the few element methods the plugin calls, recording what it did.
+export class FakeStatusBarItem {
+  text = "";
+  hidden = false;
+
+  setText(text: string): void {
+    this.text = text;
+  }
+
+  hide(): void {
+    this.hidden = true;
+  }
+
+  show(): void {
+    this.hidden = false;
+  }
+}
+
 export class Plugin {
   app: App;
   manifest: PluginManifest;
   private saved: string | null = null;
+
+  // Recorders for what a plugin registers, so tests can look at it (and run the clean-ups).
+  readonly commands: Array<{ id: string; name: string; [field: string]: unknown }> = [];
+  readonly statusBarItems: FakeStatusBarItem[] = [];
+  readonly registeredEvents: unknown[] = [];
+  readonly cleanups: Array<() => void> = [];
+  readonly intervals: number[] = [];
 
   constructor(app: App, manifest: PluginManifest) {
     this.app = app;
@@ -40,6 +65,30 @@ export class Plugin {
 
   async saveData(data: unknown): Promise<void> {
     this.saved = data === undefined ? null : JSON.stringify(data);
+  }
+
+  addCommand<T extends { id: string; name: string }>(command: T): T {
+    this.commands.push(command);
+    return command;
+  }
+
+  addStatusBarItem(): FakeStatusBarItem {
+    const item = new FakeStatusBarItem();
+    this.statusBarItems.push(item);
+    return item;
+  }
+
+  registerEvent(ref: unknown): void {
+    this.registeredEvents.push(ref);
+  }
+
+  register(cleanup: () => void): void {
+    this.cleanups.push(cleanup);
+  }
+
+  registerInterval(id: number): number {
+    this.intervals.push(id);
+    return id;
   }
 }
 
