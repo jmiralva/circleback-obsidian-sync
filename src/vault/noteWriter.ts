@@ -8,8 +8,9 @@
 //   one identity, the meeting's note: switching transcript handling turns the existing file into
 //   the other kind in place. A file of this meeting that the index has not seen yet (synced in
 //   from another device mid-run) is taken over, never copied.
-// - The user's frontmatter survives. It changes only through processFrontMatter, key by key,
-//   and the only keys ever removed are ones the plugin writes on that kind of file.
+// - The user's frontmatter survives. On a file that exists it changes only through
+//   processFrontMatter, key by key, and the only keys ever removed are ones the plugin writes on
+//   that kind of file. A new file is created whole, frontmatter and body in a single write.
 // - A file the user filed stays put, and no file ever changes folder. A file is renamed (in its
 //   folder) only while it sits exactly where the plugin would have put it under its previous
 //   title and date, so neither a move by the user nor a change of settings ever moves it.
@@ -17,7 +18,7 @@
 // The transcript is written before the note, and the note's frontmatter (which carries
 // `circleback_updated`) is the very last write. A failure anywhere leaves the note looking out
 // of date, so the next run tries the meeting again.
-import { TFile, normalizePath } from "obsidian";
+import { TFile, normalizePath, stringifyYaml } from "obsidian";
 import type { App, TAbstractFile } from "obsidian";
 import { MEETING_START_FIELD } from "../api/constants";
 import type { Meeting, TranscriptSegment } from "../api/schemas";
@@ -377,6 +378,15 @@ export class NoteWriter {
     return file;
   }
 
+  /**
+   * Creates a file complete: the frontmatter block, then the body, in one `vault.create`. Writing
+   * the body first and adding the frontmatter after would leave a moment in which other plugins
+   * (Dataview, say) see a file with no metadata yet. It also leaves no half-written file to
+   * clean up: either the create happens or nothing is there.
+   *
+   * The block is what `processFrontMatter` would write, `stringifyYaml` between two fence lines,
+   * and the body follows untouched, so `splitFrontmatter` gives it back exactly.
+   */
   private async createFile(
     path: string,
     kind: FileKind,
@@ -385,19 +395,14 @@ export class NoteWriter {
     now: Date,
   ): Promise<TFile> {
     await this.ensureFolders(path);
-    const file = await this.app.vault.create(path, body);
-    try {
-      await this.changeFrontmatter(file, (fm) => {
-        fm.type = kind === "transcript" ? "transcript" : "note";
-        Object.assign(fm, fields);
-        fm.circleback_first_synced = now.toISOString();
-      });
-    } catch (error) {
-      // The file holds only the body just written. Left there without a circleback_id, it
-      // would hold the meeting's path and the next run would put a second copy beside it.
-      await this.discard(file);
-      throw error;
-    }
+    const frontmatter: Record<string, unknown> = {
+      type: kind === "transcript" ? "transcript" : "note",
+      ...fields,
+      circleback_first_synced: now.toISOString(),
+    };
+    const yaml = stringifyYaml(frontmatter);
+    const file = await this.app.vault.create(path, `---\n${yaml}${yaml.endsWith("\n") ? "" : "\n"}---\n${body}`);
+    this.index.upsert(file, frontmatter);
     return file;
   }
 
@@ -418,14 +423,6 @@ export class NoteWriter {
       written = { ...fm };
     });
     this.index.upsert(file, written);
-  }
-
-  private async discard(file: TFile): Promise<void> {
-    try {
-      await this.app.fileManager.trashFile(file);
-    } catch (error) {
-      logger.error(`Could not move the incomplete file ${file.path} to the trash. It can be deleted by hand.`, error);
-    }
   }
 
   /** Creates the folders above `path` that do not exist yet: create needs them. */
@@ -515,9 +512,10 @@ function withTranscript(noteBody: string, transcriptBody: string): string {
 }
 
 /**
- * A body as it can be stored. A new file is created with its body alone and then given its
- * frontmatter, so a body that opens with `---` (a horizontal rule in Circleback's notes) would
- * be read as a frontmatter block. A leading blank line keeps it in the body.
+ * A body as it can be stored. A body that opens with `---` (a horizontal rule in Circleback's
+ * notes) is safe after a frontmatter block, but not in a file that has lost its block: the
+ * `processFrontMatter` that follows a body replacement would read the rule as frontmatter. A
+ * leading blank line keeps it in the body.
  */
 function storable(body: string): string {
   return OPENING_FENCE.test(body) ? `\n${body}` : body;

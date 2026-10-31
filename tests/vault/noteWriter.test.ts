@@ -3,6 +3,7 @@ import { join } from "path";
 import * as v from "valibot";
 import type { TFile } from "obsidian";
 import { MeetingListSchema, TranscriptSchema, type Meeting } from "../../src/api/schemas";
+import { buildFields } from "../../src/format/fields";
 import { buildNoteBody } from "../../src/format/noteBody";
 import { buildTranscriptBody } from "../../src/format/transcript";
 import { DEFAULT_SETTINGS, type CirclebackSyncSettings } from "../../src/settings/types";
@@ -765,14 +766,15 @@ describe("NoteWriter frontmatter", () => {
     expect(frontmatter(app, NOTE)).not.toHaveProperty("transcript");
   });
 
-  it("trashes a just-created file whose frontmatter cannot be written, so the next run starts clean", async () => {
+  it("leaves no file behind when a new file cannot be created, so the next run starts clean", async () => {
     const { app, index, writer } = await setup();
-    jest.spyOn(app.fileManager, "processFrontMatter").mockRejectedValueOnce(new Error("bad yaml"));
+    jest.spyOn(app.vault, "create").mockRejectedValueOnce(new Error("disk full"));
+    const trashFile = jest.spyOn(app.fileManager, "trashFile");
 
-    await expect(writer.write(ONE, SEGMENTS, context())).rejects.toThrow("bad yaml");
+    await expect(writer.write(ONE, SEGMENTS, context())).rejects.toThrow("disk full");
 
     expect(markdownPaths(app)).toEqual([]);
-    expect(app.exists(".trash/Meeting 1-transcript.md")).toBe(true);
+    expect(trashFile).not.toHaveBeenCalled();
     expect(index.find(ONE.id, "transcript")).toEqual([]);
 
     await writer.write(ONE, SEGMENTS, context());
@@ -803,14 +805,153 @@ describe("NoteWriter frontmatter", () => {
 
     expect(calls).toEqual([
       `create ${TRANSCRIPT}`,
-      `frontmatter ${TRANSCRIPT}`,
       `create ${NOTE}`,
-      `frontmatter ${NOTE}`,
       `body ${TRANSCRIPT}`,
       `frontmatter ${TRANSCRIPT}`,
       `body ${NOTE}`,
       `frontmatter ${NOTE}`,
     ]);
+  });
+});
+
+describe("NoteWriter creating a file", () => {
+  const FIELD_CONTEXT = { accountLabel: "Work", ownerEmail: "owner@example.com" };
+
+  /** A meeting whose note body hashes to something YAML would read as a number if it were not quoted. */
+  function meetingWithHash(pattern: RegExp): Meeting {
+    for (let n = 0; n < 5000; n++) {
+      const candidate = meeting({ notes: `Note ${n}` });
+      if (pattern.test(hashBody(buildNoteBody(candidate, BODY_OPTIONS)))) return candidate;
+    }
+    throw new Error(`No note body hashes to ${String(pattern)}`);
+  }
+
+  /** A file made the way the plugin once made it: the body alone first, the frontmatter added after. */
+  async function createTwoStep(
+    app: FakeApp,
+    path: string,
+    kind: "note" | "transcript",
+    body: string,
+    fields: Record<string, unknown>,
+  ): Promise<void> {
+    await app.vault.create(path, body);
+    await app.fileManager.processFrontMatter(file(app, path), (fm: Record<string, unknown>) => {
+      fm.type = kind;
+      Object.assign(fm, fields);
+      fm.circleback_first_synced = NOW;
+    });
+  }
+
+  it("creates each new file with one create call and no write after it", async () => {
+    const { app, index, writer } = await setup();
+    const [create, createFolder, modify, process, processFrontMatter, renameFile, trashFile] = watchWrites(app);
+
+    const result = await writer.write(ONE, SEGMENTS, context());
+
+    expect(create.mock.calls.map(([path]) => path)).toEqual([TRANSCRIPT, NOTE]);
+    expect(createFolder).toHaveBeenCalled();
+    for (const spy of [modify, process, processFrontMatter, renameFile, trashFile]) expect(spy).not.toHaveBeenCalled();
+    // The text handed to create is the finished file: frontmatter first, then the body.
+    for (const [path, text] of create.mock.calls as Array<[string, string]>) {
+      expect(text.startsWith("---\n")).toBe(true);
+      expect(splitFrontmatter(text).yaml).toContain(`circleback_id: ${ONE.id}`);
+      expect(text).toBe(app.fileText(path));
+    }
+    // The index knows both files without waiting for the metadata cache.
+    expect(index.find(ONE.id, "note")).toEqual([result.note]);
+    expect(index.find(ONE.id, "transcript")).toEqual([result.transcript]);
+    expect(index.frontmatter(file(app, NOTE))).toEqual(frontmatter(app, NOTE));
+    expect(index.frontmatter(file(app, TRANSCRIPT))).toEqual(frontmatter(app, TRANSCRIPT));
+  });
+
+  it("creates a combined file, and a transcript with no note, in one write each", async () => {
+    const { app, writer } = await setup();
+    const [create, , modify, process, processFrontMatter] = watchWrites(app);
+
+    await writer.write(ONE, SEGMENTS, context({ transcriptHandling: "combined" }));
+    await writer.write(edited({ id: "other" }), SEGMENTS, context({ saveAs: "sections" }));
+
+    expect(create).toHaveBeenCalledTimes(2);
+    for (const spy of [modify, process, processFrontMatter]) expect(spy).not.toHaveBeenCalled();
+    expect(frontmatter(app, NOTE)).toMatchObject({ circleback_kind: "combined", circleback_id: ONE.id });
+  });
+
+  it("splits the body back out exactly, so its hash is the stored hash", async () => {
+    const ruled = meeting({ notes: "---\nsummary: not a property\n---\nText." });
+    const cases: Array<[string, Meeting, Partial<CirclebackSyncSettings>, string[]]> = [
+      ["a note and its transcript", ONE, {}, [NOTE, TRANSCRIPT]],
+      ["a combined file", ONE, { transcriptHandling: "combined" }, [NOTE]],
+      ["a note whose body opens with a rule", ruled, {}, [NOTE, TRANSCRIPT]],
+    ];
+    for (const [, m, settings, paths] of cases) {
+      const { app, writer } = await setup();
+      await writer.write(m, SEGMENTS, context(settings));
+      for (const path of paths) {
+        const { body } = splitFrontmatter(app.fileText(path));
+        expect(frontmatter(app, path).circleback_hash).toBe(hashBody(body));
+      }
+    }
+
+    const { app, writer } = await setup();
+    await writer.write(ONE, SEGMENTS, context());
+    expect(splitFrontmatter(app.fileText(NOTE)).body).toBe(buildNoteBody(ONE, BODY_OPTIONS));
+    expect(splitFrontmatter(app.fileText(TRANSCRIPT)).body).toBe(
+      buildTranscriptBody("Meeting 1", SEGMENTS, ONE.createdAt, "Owner Person", "You"),
+    );
+  });
+
+  it("gives a new file the same frontmatter, key for key and in the same order, as the two-step way did", async () => {
+    const { app, writer } = await setup();
+    await writer.write(ONE, SEGMENTS, context());
+
+    const reference = createFakeApp();
+    await reference.vault.createFolder("Circleback");
+    await reference.vault.createFolder("Circleback/Transcripts");
+    const noteBody = bodyOf(app, NOTE);
+    const transcriptBody = bodyOf(app, TRANSCRIPT);
+    await createTwoStep(
+      reference,
+      NOTE,
+      "note",
+      noteBody,
+      buildFields(ONE, { ...FIELD_CONTEXT, kind: "note", linkTo: TRANSCRIPT, hash: hashBody(noteBody) }),
+    );
+    await createTwoStep(
+      reference,
+      TRANSCRIPT,
+      "transcript",
+      transcriptBody,
+      buildFields(ONE, { ...FIELD_CONTEXT, kind: "transcript", linkTo: NOTE, hash: hashBody(transcriptBody) }),
+    );
+
+    for (const path of [NOTE, TRANSCRIPT]) {
+      const created = frontmatter(app, path);
+      const expected = frontmatter(reference, path);
+      expect(Object.keys(created)).toEqual(Object.keys(expected));
+      expect(created).toEqual(expected);
+      expect(bodyOf(app, path)).toBe(bodyOf(reference, path));
+    }
+    // The creation keys sit where they always did: `type` first, `circleback_first_synced` last.
+    const keys = Object.keys(frontmatter(app, NOTE));
+    expect(keys[0]).toBe("type");
+    expect(keys[keys.length - 1]).toBe("circleback_first_synced");
+  });
+
+  it.each([
+    ["only digits", /^\d{8}$/],
+    // Like "417226e6": a number once the e is read as an exponent (a short one, so it stays finite).
+    ["digits around one e", /^\d{5,6}e\d{1,2}$/],
+  ])("keeps a hash of %s a string, as the stored hash and in the index", async (_name, pattern) => {
+    const m = meetingWithHash(pattern);
+    const { app, index, writer } = await setup();
+
+    const result = await writer.write(m, null, context());
+
+    const hash = hashBody(bodyOf(app, NOTE));
+    expect(hash).toMatch(pattern);
+    expect(frontmatter(app, NOTE).circleback_hash).toBe(hash);
+    expect(index.frontmatter(file(app, NOTE))?.circleback_hash).toBe(hash);
+    expect(result.note).toBe(file(app, NOTE));
   });
 });
 

@@ -1,6 +1,7 @@
 // The frontmatter the plugin writes for a note or a transcript.
 //
-// This builds the values only. Writing them goes through `processFrontMatter` (Task 10),
+// This builds the values only. The note writer (Task 10) writes them: a new file is created
+// with them in its frontmatter block, and an existing file gets them through `processFrontMatter`,
 // which removes a plugin-owned key that is absent from the result, so a key left out here
 // (`meeting_url` for a meeting with no video link) disappears from a note that had it.
 //
