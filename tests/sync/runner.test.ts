@@ -259,6 +259,23 @@ describe("SyncRunner.syncNow", () => {
     expect(notices.some((n) => n.includes("duplicate"))).toBe(false);
   });
 
+  it("has the run's duplicates and account state in place when it tells the settings tab the run is over", async () => {
+    const { runner, engine, device, hooks } = setup();
+    const seen: Array<{ duplicates: number; lastSuccessAt: string | undefined }> = [];
+    hooks.onStatusChange = () => {
+      seen.push({ duplicates: runner.duplicates.length, lastSuccessAt: device.account("a").lastSuccessAt });
+    };
+    engine.sync.mockImplementation(async () => {
+      device.update("a", { lastSuccessAt: "2026-10-31T15:00:00.000Z" });
+      return run({ a: ok() }, dupes(2));
+    });
+
+    await runner.syncNow();
+
+    // The settings tab redraws its duplicates and status lines from the last update of a run.
+    expect(seen[seen.length - 1]).toEqual({ duplicates: 2, lastSuccessAt: "2026-10-31T15:00:00.000Z" });
+  });
+
   it("catches an error the engine throws, logs it, and tells the user", async () => {
     const { runner, engine, notices, statusChanges } = setup();
     engine.sync.mockRejectedValue(new Error("vault exploded"));

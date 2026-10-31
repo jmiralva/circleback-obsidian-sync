@@ -128,7 +128,8 @@ export default class CirclebackSyncPlugin extends Plugin {
 
   /**
    * Sets the status bar text from the current state; hides the item when there is nothing to say.
-   * The settings tab is told too, since a full sync starting or ending changes its button.
+   * The settings tab is told too, since a sync starting or ending changes its button, its status
+   * lines and its list of duplicates.
    */
   refreshStatus(): void {
     if (this.statusEl === null || this.syncRunner === null) return;
@@ -136,7 +137,7 @@ export default class CirclebackSyncPlugin extends Plugin {
     this.statusEl.setText(text);
     if (text === "") this.statusEl.hide();
     else this.statusEl.show();
-    this.settingTab?.refreshFullSyncButton();
+    this.settingTab?.refreshInPlace();
   }
 
   /** A Circleback client for one API key: the engine's factory, also used by "Test connection". */

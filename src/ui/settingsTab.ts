@@ -7,11 +7,10 @@
 // typing pauses, and the tab asks the saver to save what is waiting before it redraws, starts a
 // sync, or closes.
 import { Notice, PluginSettingTab, Setting, debounce } from "obsidian";
-import type { App, ButtonComponent, TFile, TextComponent } from "obsidian";
+import type { App, ButtonComponent, TextComponent } from "obsidian";
 import type CirclebackSyncPlugin from "../main";
 import type { AccountConfig, CirclebackSyncSettings } from "../settings/types";
 import { logger } from "../util/logger";
-import type { Kind } from "../vault/meetingIndex";
 import { clearKey, commitKey, testKey } from "./accountKeys";
 import type { KeyChange } from "./accountKeys";
 import { KEY_NOT_SAVED, LOGS_COPIED, LOGS_NOT_COPIED, SETTINGS_NOT_SAVED, settingsChangeNotice } from "./notices";
@@ -22,12 +21,14 @@ import type { Edit, SettingsChange } from "./settingsSaver";
 import {
   REMOVE_ACCOUNT_TEXT,
   accountTitle,
+  duplicatesView,
   fullSyncButtonText,
   fullSyncDescription,
   keyRowView,
+  sameDuplicatesView,
   settingsVisibility,
 } from "./settingsView";
-import type { SettingsVisibility } from "./settingsView";
+import type { DuplicatesView, SettingsVisibility } from "./settingsView";
 import { closeSettingsWindow } from "./settingsWindow";
 
 type Settings = CirclebackSyncSettings;
@@ -43,7 +44,6 @@ type Options<K extends ChoiceField> = ReadonlyArray<readonly [Settings[K], strin
 const SAVE_DELAY_MS = 500;
 
 const SHARED_SETTINGS_NOTE = "Everything below applies to every account.";
-const NO_DUPLICATES = "No duplicates found in the last sync on this device.";
 // Kept as constants, not inline, so the sentence case check does not lowercase the brand name.
 const SELF_NAME_DESC =
   "The speaker name that is you in transcripts. The plugin looks for it among the speakers to recognize your lines, and labels them as Self label says. It wins over the name found in your meetings, which is used when this is empty.";
@@ -64,12 +64,6 @@ const SUBFOLDER_OPTIONS = [
 ] as const;
 const SUBFOLDER_HELP = "By day is 2026-10-27, by month 2026-10, year then month 2026/10, and year then quarter 2026/Q4.";
 
-const DUPLICATE_KINDS: Record<Kind, string> = {
-  note: "Note",
-  transcript: "Transcript",
-  combined: "Note with transcript",
-};
-
 // Obsidian 1.13 prefers declarative setting definitions (`getSettingDefinitions`) to `display`, but
 // this plugin supports 1.11.4 (manifest.json), which has only `display`.
 export class CirclebackSettingTab extends PluginSettingTab {
@@ -78,6 +72,11 @@ export class CirclebackSettingTab extends PluginSettingTab {
   private readonly testResults = new Map<string, string>();
   /** The full sync button on the page now, so it can follow the sync without a redraw. */
   private fullSyncButton: ButtonComponent | null = null;
+  /** Per account on the page now, what brings its status line up to date without a redraw. */
+  private readonly accountRefreshers = new Map<string, () => void>();
+  /** The part of the Duplicates section under its toggle, and what it shows now. */
+  private duplicatesEl: HTMLElement | null = null;
+  private shownDuplicates: DuplicatesView | null = null;
 
   constructor(
     app: App,
@@ -103,14 +102,29 @@ export class CirclebackSettingTab extends PluginSettingTab {
   hide(): void {
     super.hide();
     this.testResults.clear();
-    this.fullSyncButton = null;
+    this.forgetPage();
     void this.saver.close();
   }
 
-  /** Called whenever the plugin's status changes, which includes a full sync starting and ending. */
-  refreshFullSyncButton(): void {
-    if (!this.saver.isOpen || this.fullSyncButton === null) return;
-    this.fullSyncButton.setButtonText(fullSyncButtonText(this.fullSyncRunning()));
+  /**
+   * Called whenever the plugin's status changes, which includes a full sync starting and ending
+   * and every run ending. It brings the parts of the page that follow the sync up to date in
+   * place: the full sync button, each account's status line and the Duplicates list. A redraw
+   * would take the focus from a field that is being typed in.
+   */
+  refreshInPlace(): void {
+    if (!this.saver.isOpen) return;
+    this.fullSyncButton?.setButtonText(fullSyncButtonText(this.fullSyncRunning()));
+    for (const refresh of this.accountRefreshers.values()) refresh();
+    this.showDuplicates();
+  }
+
+  /** Lets go of the controls of the page that was built, which is gone or about to be. */
+  private forgetPage(): void {
+    this.fullSyncButton = null;
+    this.accountRefreshers.clear();
+    this.duplicatesEl = null;
+    this.shownDuplicates = null;
   }
 
   private fullSyncRunning(): boolean {
@@ -123,6 +137,7 @@ export class CirclebackSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     const scroll = containerEl.scrollTop;
     containerEl.empty();
+    this.forgetPage();
     const settings = this.plugin.settingsStore.current;
     const show = settingsVisibility(settings);
 
@@ -167,8 +182,8 @@ export class CirclebackSettingTab extends PluginSettingTab {
     const block = el.createDiv({ cls: "circleback-sync-account" });
     const { id } = account;
 
-    // The title follows a label change at the next redraw, not while typing.
-    new Setting(block).setName(accountTitle(account.label)).setHeading().settingEl.addClass("circleback-sync-account-title");
+    const title = new Setting(block).setName(accountTitle(account.label)).setHeading();
+    title.settingEl.addClass("circleback-sync-account-title");
 
     let label = account.label;
     new Setting(block)
@@ -180,6 +195,8 @@ export class CirclebackSettingTab extends PluginSettingTab {
           // An account with no label could not be told apart in the status bar.
           if (trimmed === "") return;
           label = trimmed;
+          // The title follows as it is typed. A redraw would take the focus from this field.
+          title.setName(accountTitle(label));
           this.saver.later((current) => updateAccount(current, id, { label: trimmed }));
         });
         text.inputEl.addEventListener("change", () => {
@@ -224,6 +241,8 @@ export class CirclebackSettingTab extends PluginSettingTab {
       showKey();
     };
     showKey();
+    // The status line under the key follows each sync.
+    this.accountRefreshers.set(id, showKey);
 
     new Setting(block)
       .setName("Test connection")
@@ -448,22 +467,28 @@ export class CirclebackSettingTab extends PluginSettingTab {
       el, settings, "cleanUpDuplicates", "Clean up duplicates",
       "Moves an extra copy of a meeting's note to the trash, but only when nobody has edited it since the plugin wrote it. Other copies are only listed here.",
     );
-    const groups = this.plugin.runner.duplicates;
-    if (groups.length === 0) {
-      el.createEl("p", { text: NO_DUPLICATES, cls: "setting-item-description" });
-      return;
-    }
-    el.createEl("p", {
-      text: "Meetings that still had more than one file after the last sync on this device. The first file in each group is the one that is kept.",
-      cls: "setting-item-description",
-    });
-    const list = el.createDiv({ cls: "circleback-sync-duplicates" });
-    for (const group of groups) {
+    // Rebuilt in place after each sync, so the list is not stale while the tab stays open.
+    this.duplicatesEl = el.createDiv();
+    this.showDuplicates();
+  }
+
+  /** Shows the duplicates from the last sync, rebuilding the list only when it has changed. */
+  private showDuplicates(): void {
+    const section = this.duplicatesEl;
+    if (section === null) return;
+    const view = duplicatesView(this.plugin.runner.duplicates);
+    // A status update that changes nothing here must not replace a link that is being clicked.
+    if (this.shownDuplicates !== null && sameDuplicatesView(this.shownDuplicates, view)) return;
+    this.shownDuplicates = view;
+    section.empty();
+    section.createEl("p", { text: view.message, cls: "setting-item-description" });
+    if (view.groups.length === 0) return;
+    const list = section.createDiv({ cls: "circleback-sync-duplicates" });
+    for (const group of view.groups) {
       const item = list.createDiv({ cls: "circleback-sync-duplicate-group" });
-      item.createDiv({ text: DUPLICATE_KINDS[group.kind], cls: "circleback-sync-duplicate-kind" });
+      item.createDiv({ text: group.kind, cls: "circleback-sync-duplicate-kind" });
       const files = item.createEl("ul");
-      this.fileLink(files, group.keep, true);
-      for (const other of group.others) this.fileLink(files, other, false);
+      for (const file of group.files) this.fileLink(files, file.path, file.kept);
     }
   }
 
@@ -562,13 +587,13 @@ export class CirclebackSettingTab extends PluginSettingTab {
       });
   }
 
-  private fileLink(list: HTMLElement, file: TFile, kept: boolean): void {
+  private fileLink(list: HTMLElement, path: string, kept: boolean): void {
     const item = list.createEl("li");
-    const link = item.createEl("a", { text: file.path, attr: { href: "#" } });
+    const link = item.createEl("a", { text: path, attr: { href: "#" } });
     link.addEventListener("click", (event) => {
       event.preventDefault();
       closeSettingsWindow(this.app);
-      void this.app.workspace.openLinkText(file.path, "", true);
+      void this.app.workspace.openLinkText(path, "", true);
     });
     if (kept) item.appendText(" (kept)");
   }
@@ -618,7 +643,7 @@ export class CirclebackSettingTab extends PluginSettingTab {
   private async toggleFullSync(): Promise<void> {
     if (this.fullSyncRunning()) this.plugin.runner.cancelFullSync();
     else await this.startFullSync();
-    // The button follows the sync through `refreshFullSyncButton`, which the runner's status updates reach.
+    // The button follows the sync through `refreshInPlace`, which the runner's status updates reach.
   }
 
   /** Starts a full sync, from the button or from the notice. */

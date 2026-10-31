@@ -3,18 +3,22 @@ import type { ConnectionInfo } from "../../src/api/schemas";
 import { DEFAULT_SETTINGS } from "../../src/settings/types";
 import type { CirclebackSyncSettings } from "../../src/settings/types";
 import {
+  DUPLICATES_INTRO,
   KEY_PLACEHOLDER,
   KEY_STORED_PLACEHOLDER,
+  NO_DUPLICATES,
   NO_KEY_TO_TEST,
   REMOVE_ACCOUNT_TEXT,
   UNNAMED_ACCOUNT,
   accountStatusLine,
   accountTitle,
   checkConnection,
+  duplicatesView,
   fullSyncButtonText,
   fullSyncDescription,
   keyRowView,
   removeAccountTitle,
+  sameDuplicatesView,
   settingsVisibility,
 } from "../../src/ui/settingsView";
 import { logger } from "../../src/util/logger";
@@ -195,6 +199,10 @@ describe("accountTitle", () => {
     expect(accountTitle("Work")).toBe("Work");
   });
 
+  it("is the label without the spaces around it, as it is saved", () => {
+    expect(accountTitle("  Work account ")).toBe("Work account");
+  });
+
   it("stands in for a label that is empty or only spaces", () => {
     expect(UNNAMED_ACCOUNT).toBe("Unnamed account");
     expect(accountTitle("")).toBe("Unnamed account");
@@ -329,5 +337,77 @@ describe("settingsVisibility", () => {
       expect(show.transcriptFolder).toBe(false);
       expect(show.transcriptFilename).toBe(false);
     });
+  });
+});
+
+describe("duplicatesView", () => {
+  /** A duplicate group as far as the view reads one: files are only their paths. */
+  function group(kind: "note" | "transcript" | "combined", keep: string, others: string[]) {
+    return { kind, keep: { path: keep }, others: others.map((path) => ({ path })) };
+  }
+
+  it("says there are none when the last sync left no duplicates", () => {
+    expect(NO_DUPLICATES).toBe("No duplicates found in the last sync on this device.");
+    expect(duplicatesView([])).toEqual({ message: NO_DUPLICATES, groups: [] });
+  });
+
+  it("lists each group by kind, with the file that is kept first", () => {
+    const view = duplicatesView([
+      group("note", "Meetings/A.md", ["Meetings/A copy.md"]),
+      group("transcript", "T/B.md", ["T/B 1.md", "T/B 2.md"]),
+      group("combined", "C.md", ["Old/C.md"]),
+    ]);
+
+    expect(view.message).toBe(DUPLICATES_INTRO);
+    expect(view.groups).toEqual([
+      {
+        kind: "Note",
+        files: [
+          { path: "Meetings/A.md", kept: true },
+          { path: "Meetings/A copy.md", kept: false },
+        ],
+      },
+      {
+        kind: "Transcript",
+        files: [
+          { path: "T/B.md", kept: true },
+          { path: "T/B 1.md", kept: false },
+          { path: "T/B 2.md", kept: false },
+        ],
+      },
+      {
+        kind: "Note with transcript",
+        files: [
+          { path: "C.md", kept: true },
+          { path: "Old/C.md", kept: false },
+        ],
+      },
+    ]);
+  });
+
+  it("explains the list in plain words", () => {
+    expect(DUPLICATES_INTRO).toBe(
+      "Meetings that still had more than one file after the last sync on this device. The first file in each group is the one that is kept.",
+    );
+  });
+});
+
+describe("sameDuplicatesView", () => {
+  const pair = [{ kind: "note" as const, keep: { path: "A.md" }, others: [{ path: "A copy.md" }] }];
+
+  it("is true for lists that show the same", () => {
+    expect(sameDuplicatesView(duplicatesView([]), duplicatesView([]))).toBe(true);
+    expect(sameDuplicatesView(duplicatesView(pair), duplicatesView(structuredClone(pair)))).toBe(true);
+  });
+
+  it("is false once the list gained, lost or changed a group or a file", () => {
+    const shown = duplicatesView(pair);
+    expect(sameDuplicatesView(shown, duplicatesView([]))).toBe(false);
+    expect(sameDuplicatesView(duplicatesView([]), shown)).toBe(false);
+    expect(sameDuplicatesView(shown, duplicatesView([{ ...pair[0], kind: "transcript" }]))).toBe(false);
+    expect(sameDuplicatesView(shown, duplicatesView([{ ...pair[0], others: [{ path: "A 1.md" }] }]))).toBe(false);
+    expect(sameDuplicatesView(shown, duplicatesView([{ ...pair[0], others: [...pair[0].others, { path: "A 2.md" }] }]))).toBe(false);
+    // A file that was moved shows under its new path.
+    expect(sameDuplicatesView(shown, duplicatesView([{ ...pair[0], keep: { path: "Moved/A.md" } }]))).toBe(false);
   });
 });

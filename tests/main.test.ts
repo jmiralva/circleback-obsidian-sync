@@ -158,10 +158,10 @@ describe("CirclebackSyncPlugin.onload", () => {
     expect(recorded.settingTabs[0]).toBeInstanceOf(CirclebackSettingTab);
   });
 
-  it("tells the open settings tab when the status changes, so its full sync button follows the sync", async () => {
+  it("tells the open settings tab when the status changes, so its button, status lines and duplicates follow the sync", async () => {
     const { plugin, recorded } = await load();
     const tab = recorded.settingTabs[0] as CirclebackSettingTab;
-    const update = jest.spyOn(tab, "refreshFullSyncButton");
+    const update = jest.spyOn(tab, "refreshInPlace");
 
     plugin.refreshStatus();
     expect(update).toHaveBeenCalledTimes(1);

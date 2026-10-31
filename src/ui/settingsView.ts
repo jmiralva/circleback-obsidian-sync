@@ -7,6 +7,7 @@ import type { CirclebackSyncSettings } from "../settings/types";
 import type { AccountDeviceState } from "../state/deviceState";
 import type { AccountErrorKind } from "../sync/syncEngine";
 import { logger } from "../util/logger";
+import type { Kind } from "../vault/meetingIndex";
 import { isAccountErrorKind, reasonText } from "./notices";
 
 /** An error kind from stored state, or "unexpected" when it is missing or not one this version knows. */
@@ -97,6 +98,59 @@ export async function checkConnection(
     const kind: AccountErrorKind = error instanceof CirclebackError ? error.kind : "unexpected";
     return { text: `Could not connect because ${reasonText(kind)}.` };
   }
+}
+
+export const NO_DUPLICATES = "No duplicates found in the last sync on this device.";
+export const DUPLICATES_INTRO =
+  "Meetings that still had more than one file after the last sync on this device. The first file in each group is the one that is kept.";
+
+const DUPLICATE_KINDS: Record<Kind, string> = {
+  note: "Note",
+  transcript: "Transcript",
+  combined: "Note with transcript",
+};
+
+/** A file of a duplicate group, by the path it has now. */
+export interface DuplicateFileView {
+  path: string;
+  /** The first file of a group is the one that is kept. */
+  kept: boolean;
+}
+
+export interface DuplicateGroupView {
+  kind: string;
+  files: DuplicateFileView[];
+}
+
+/** What the Duplicates section shows under its toggle: a sentence, then a list when there is anything to list. */
+export interface DuplicatesView {
+  message: string;
+  groups: DuplicateGroupView[];
+}
+
+/** The duplicates from the last sync as the section shows them. Files are read by path only. */
+export function duplicatesView(
+  groups: ReadonlyArray<{ kind: Kind; keep: { path: string }; others: ReadonlyArray<{ path: string }> }>,
+): DuplicatesView {
+  if (groups.length === 0) return { message: NO_DUPLICATES, groups: [] };
+  return {
+    message: DUPLICATES_INTRO,
+    groups: groups.map((group) => ({
+      kind: DUPLICATE_KINDS[group.kind],
+      files: [
+        { path: group.keep.path, kept: true },
+        ...group.others.map((other) => ({ path: other.path, kept: false })),
+      ],
+    })),
+  };
+}
+
+/**
+ * Whether two views show the same, so that the section is only rebuilt when it would change.
+ * Rebuilding it on every status update would replace a link while it is being clicked.
+ */
+export function sameDuplicatesView(a: DuplicatesView, b: DuplicatesView): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
 }
 
 /** Which settings the tab shows, by the choices made in the settings above them. */
