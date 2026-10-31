@@ -32,12 +32,19 @@ export function accountStatusLine(hasKey: boolean, state: AccountDeviceState): s
 
 export const NO_KEY_TO_TEST = "Enter an API key first.";
 export const KEY_PLACEHOLDER = "Paste your Circleback API key";
-export const KEY_STORED_PLACEHOLDER = "Stored on this device";
+/** Twelve bullet dots (U+2022). The key is never in the field; this makes the field look filled. */
+export const KEY_STORED_PLACEHOLDER = "\u2022".repeat(12);
+/** The field's accessible name, so that "a key is stored" is not only visual. */
+export const KEY_LABEL = "API key";
+export const KEY_STORED_LABEL = "API key stored on this device. Paste a new key to replace it.";
 
-/** What the account's API key row shows: the status line, the placeholder, and whether it offers "Clear key". */
+/** What the account's API key row shows: the status line, the field's look and name, and whether it offers "Clear key". */
 export interface KeyRowView {
   status: string;
   placeholder: string;
+  /** Whether this device has the key: the field then shows its placeholder in the normal text color. */
+  keyStored: boolean;
+  ariaLabel: string;
   canClear: boolean;
 }
 
@@ -46,8 +53,25 @@ export function keyRowView(hasKey: boolean, state: AccountDeviceState): KeyRowVi
   return {
     status: accountStatusLine(hasKey, state),
     placeholder: hasKey ? KEY_STORED_PLACEHOLDER : KEY_PLACEHOLDER,
+    keyStored: hasKey,
+    ariaLabel: hasKey ? KEY_STORED_LABEL : KEY_LABEL,
     canClear: hasKey,
   };
+}
+
+/**
+ * Whether two key rows show the same, so that the row is only rewritten when it would change.
+ * Rewriting it on every status update, which includes each progress tick of a full sync, would
+ * drop a text selection in the status line.
+ */
+export function sameKeyRowView(a: KeyRowView, b: KeyRowView): boolean {
+  return (
+    a.status === b.status &&
+    a.placeholder === b.placeholder &&
+    a.keyStored === b.keyStored &&
+    a.ariaLabel === b.ariaLabel &&
+    a.canClear === b.canClear
+  );
 }
 
 /** The account list is in data.json, so removing an account removes it everywhere the vault is shared. */

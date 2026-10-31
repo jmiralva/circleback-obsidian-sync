@@ -18,6 +18,12 @@
   font-size: var(--font-ui-medium);
 }
 
+/* The API key field while this device has the key: its placeholder is a row of dots, in the normal text color so the field reads as filled and not as a grey hint. The key itself is never in the field. */
+.circleback-sync-key-stored::placeholder {
+  color: var(--text-normal);
+  opacity: 1;
+}
+
 /* What "Test connection" said, under the account's button. */
 .circleback-sync-test-result {
   padding-bottom: var(--size-4-2);

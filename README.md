@@ -50,7 +50,7 @@ Out of the box, notes go into a `Circleback` folder, one file per meeting, named
 
 - **Where keys are kept.** Each key is saved in Obsidian's secret storage, under the name `circleback-sync-` followed by an internal account id. Obsidian keeps it on this device, for this vault. A key is never written to the plugin's settings file (`data.json`), to your notes, or to anything a sync service or git backup would carry away.
 - **See and remove keys.** Obsidian lists the keys stored on this device under Settings > Keychain, including this plugin's. You can see and remove them there.
-- **The key field stays empty.** After you save a key, the field empties and says "Stored on this device". The plugin never shows a saved key again.
+- **The key field shows dots, never the key.** After you save a key, the field empties and shows a row of dots, so it looks filled: this device has the key. The dots are only a mark. The plugin never shows a saved key again, so to replace it, paste a new key into the field.
 - **A second device needs its own copy of the key.** The list of accounts is part of the plugin's settings and travels with your vault, but the keys do not. On a second device, an account without a key shows "Key needed on this device" under its API key field, and the status bar says the same. Paste the key there once. No sync runs for that account on that device until you do.
 - **Clear key** removes a key from this device only. The account stays in the list and starts syncing again when you paste a key. The button appears only when this device has a key. Obsidian 1.11.4, the oldest version this plugin supports, gives plugins no way to delete a secret, so the plugin overwrites the key with an empty value. An empty entry named `circleback-sync-` followed by the account's internal id may remain in Obsidian's secret storage.
 - **Remove** takes the account out of the list on every device that shares the vault, and removes its key from the device where you click it. It asks you to confirm first. The account's notes stay in your vault. Like "Clear key", it leaves an empty entry on the device where you click it. A key already stored on another device is not touched, so use "Clear key" on that device first if you want it gone.
@@ -251,7 +251,7 @@ Add an account with "Add account". New accounts are labeled "Account 1", "Accoun
 | Setting | Default | What it does |
 | --- | --- | --- |
 | Label | "Account 1" | A name that tells your accounts apart. It appears in the status bar, in notices and in `circleback_account`. It cannot be empty. |
-| API key | None | The account's Circleback API key. Saved on this device only. Beside it, "Clear key" removes the key from this device. |
+| API key | None | The account's Circleback API key. Saved on this device only. The field shows a row of dots when this device has the key, and never shows the key itself. Beside it, "Clear key" removes the key from this device. |
 | Test connection | | Checks the key and shows the email it belongs to, and the key's name. |
 | Your name in transcripts | Empty | The speaker name that is you in transcripts. The plugin looks for it among the speakers to recognize your lines, and labels them as Self label says. It wins over the name found in your meetings, which is used when this is empty. |
 | Remove account | | Removes the account and its key (see [API keys and devices](#api-keys-and-devices)). |

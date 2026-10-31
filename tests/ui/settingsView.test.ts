@@ -4,7 +4,9 @@ import { DEFAULT_SETTINGS } from "../../src/settings/types";
 import type { CirclebackSyncSettings } from "../../src/settings/types";
 import {
   DUPLICATES_INTRO,
+  KEY_LABEL,
   KEY_PLACEHOLDER,
+  KEY_STORED_LABEL,
   KEY_STORED_PLACEHOLDER,
   NO_DUPLICATES,
   NO_KEY_TO_TEST,
@@ -19,6 +21,7 @@ import {
   keyRowView,
   removeAccountTitle,
   sameDuplicatesView,
+  sameKeyRowView,
   settingsVisibility,
 } from "../../src/ui/settingsView";
 import { logger } from "../../src/util/logger";
@@ -160,24 +163,55 @@ describe("keyRowView", () => {
     expect(keyRowView(false, {})).toEqual({
       status: "Key needed on this device",
       placeholder: KEY_PLACEHOLDER,
+      keyStored: false,
+      ariaLabel: KEY_LABEL,
       canClear: false,
     });
     expect(KEY_PLACEHOLDER).toBe("Paste your Circleback API key");
+    expect(KEY_LABEL).toBe("API key");
   });
 
-  it("says a key is stored, and offers to clear it, when this device has one", () => {
+  it("shows a row of dots, and offers to clear the key, when this device has one", () => {
     expect(keyRowView(true, { lastSuccessAt: "2026-10-27T15:42:00.000Z" })).toEqual({
       status: "Last synced Oct 27, 10:42",
       placeholder: KEY_STORED_PLACEHOLDER,
+      keyStored: true,
+      ariaLabel: KEY_STORED_LABEL,
       canClear: true,
     });
-    expect(KEY_STORED_PLACEHOLDER).toBe("Stored on this device");
+  });
+
+  it("uses exactly 12 bullet dots, so the field looks filled", () => {
+    expect(KEY_STORED_PLACEHOLDER).toBe("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022");
+    expect(KEY_STORED_PLACEHOLDER).toHaveLength(12);
+    expect(keyRowView(true, {}).placeholder).toBe(KEY_STORED_PLACEHOLDER);
+  });
+
+  it("says in words that a key is stored, for screen readers", () => {
+    expect(KEY_STORED_LABEL).toBe("API key stored on this device. Paste a new key to replace it.");
+    expect(keyRowView(true, {}).ariaLabel).toBe(KEY_STORED_LABEL);
+    expect(keyRowView(false, {}).ariaLabel).toBe("API key");
   });
 
   it("shows why an account stopped, when it has a key", () => {
     expect(keyRowView(true, { failing: true, lastError: "auth" }).status).toBe(
       "Stopped syncing because the API key was not accepted",
     );
+  });
+});
+
+describe("sameKeyRowView", () => {
+  it("is true for views that show the same", () => {
+    const state = { lastSuccessAt: "2026-10-27T15:42:00.000Z" };
+    expect(sameKeyRowView(keyRowView(true, state), keyRowView(true, state))).toBe(true);
+    expect(sameKeyRowView(keyRowView(false, {}), keyRowView(false, {}))).toBe(true);
+  });
+
+  it("is false when the status, the stored key or the clear button differs", () => {
+    const stored = keyRowView(true, { lastSuccessAt: "2026-10-27T15:42:00.000Z" });
+    expect(sameKeyRowView(stored, keyRowView(true, { lastSuccessAt: "2026-10-27T16:00:00.000Z" }))).toBe(false);
+    expect(sameKeyRowView(stored, keyRowView(true, { failing: true, lastError: "auth" }))).toBe(false);
+    expect(sameKeyRowView(keyRowView(true, {}), keyRowView(false, {}))).toBe(false);
   });
 });
 

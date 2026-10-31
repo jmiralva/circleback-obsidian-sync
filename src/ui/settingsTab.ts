@@ -26,9 +26,10 @@ import {
   fullSyncDescription,
   keyRowView,
   sameDuplicatesView,
+  sameKeyRowView,
   settingsVisibility,
 } from "./settingsView";
-import type { DuplicatesView, SettingsVisibility } from "./settingsView";
+import type { DuplicatesView, KeyRowView, SettingsVisibility } from "./settingsView";
 import { closeSettingsWindow } from "./settingsWindow";
 
 type Settings = CirclebackSyncSettings;
@@ -42,6 +43,9 @@ type ChoiceField = Exclude<FieldOf<string>, TextField>;
 type Options<K extends ChoiceField> = ReadonlyArray<readonly [Settings[K], string]>;
 
 const SAVE_DELAY_MS = 500;
+
+// On the API key field while this device has the key, so that its dots read as a filled field (styles.css).
+const KEY_STORED_CLASS = "circleback-sync-key-stored";
 
 const SHARED_SETTINGS_NOTE = "Everything below applies to every account.";
 // Kept as constants, not inline, so the sentence case check does not lowercase the brand name.
@@ -219,11 +223,21 @@ export class CirclebackSettingTab extends PluginSettingTab {
       keyRow.clear = button;
       button.setButtonText("Clear key").onClick(() => showKeyChange(clearKey(this.plugin, id)));
     });
+    let shownKey: KeyRowView | null = null;
     const showKey = (): void => {
-      // The stored key is never shown: the field is empty until something is pasted.
+      // The stored key is never shown, and neither is a stand-in: the field's value stays empty
+      // until something is pasted, and a placeholder of dots makes it look filled.
       const view = keyRowView(this.plugin.keys.get(id) !== null, this.plugin.device.account(id));
+      // This runs on every status update, including each progress tick of a full sync. Writing
+      // what is already there would drop a text selection in the status line.
+      if (shownKey !== null && sameKeyRowView(shownKey, view)) return;
+      shownKey = view;
       keySetting.setDesc(view.status);
-      keyRow.text?.setPlaceholder(view.placeholder);
+      if (keyRow.text !== null) {
+        keyRow.text.setPlaceholder(view.placeholder);
+        keyRow.text.inputEl.toggleClass(KEY_STORED_CLASS, view.keyStored);
+        keyRow.text.inputEl.setAttribute("aria-label", view.ariaLabel);
+      }
       if (view.canClear) keyRow.clear?.buttonEl.show();
       else keyRow.clear?.buttonEl.hide();
     };
