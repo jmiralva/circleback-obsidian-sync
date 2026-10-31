@@ -7,7 +7,9 @@ import {
   KEY_STORED_PLACEHOLDER,
   NO_KEY_TO_TEST,
   REMOVE_ACCOUNT_TEXT,
+  UNNAMED_ACCOUNT,
   accountStatusLine,
+  accountTitle,
   checkConnection,
   fullSyncButtonText,
   fullSyncDescription,
@@ -185,6 +187,18 @@ describe("removing an account", () => {
   it("asks about the account by its label", () => {
     expect(removeAccountTitle("Work")).toBe('Remove "Work"?');
     expect(removeAccountTitle('The "big" one')).toBe('Remove "The "big" one"?');
+  });
+});
+
+describe("accountTitle", () => {
+  it("is the account's label", () => {
+    expect(accountTitle("Work")).toBe("Work");
+  });
+
+  it("stands in for a label that is empty or only spaces", () => {
+    expect(UNNAMED_ACCOUNT).toBe("Unnamed account");
+    expect(accountTitle("")).toBe("Unnamed account");
+    expect(accountTitle("   ")).toBe("Unnamed account");
   });
 });
 

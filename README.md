@@ -49,6 +49,7 @@ Out of the box, notes go into a `Circleback` folder, one file per meeting, named
 ## API keys and devices
 
 - **Where keys are kept.** Each key is saved in Obsidian's secret storage, under the name `circleback-sync-` followed by an internal account id. Obsidian keeps it on this device, for this vault. A key is never written to the plugin's settings file (`data.json`), to your notes, or to anything a sync service or git backup would carry away.
+- **See and remove keys.** Obsidian lists the keys stored on this device under Settings > Keychain, including this plugin's. You can see and remove them there.
 - **The key field stays empty.** After you save a key, the field empties and says "Stored on this device". The plugin never shows a saved key again.
 - **A second device needs its own copy of the key.** The list of accounts is part of the plugin's settings and travels with your vault, but the keys do not. On a second device, an account without a key shows "Key needed on this device" under its API key field, and the status bar says the same. Paste the key there once. No sync runs for that account on that device until you do.
 - **Clear key** removes a key from this device only. The account stays in the list and starts syncing again when you paste a key. The button appears only when this device has a key. Obsidian 1.11.4, the oldest version this plugin supports, gives plugins no way to delete a secret, so the plugin overwrites the key with an empty value. An empty entry named `circleback-sync-` followed by the account's internal id may remain in Obsidian's secret storage.
@@ -238,7 +239,7 @@ When you change a setting, what happens to existing notes depends on its kind:
 
 ### Accounts
 
-Add an account with "Add account". New accounts are labeled "Account 1", "Account 2" and so on. Each account has these settings:
+Add an account with "Add account". New accounts are labeled "Account 1", "Account 2" and so on. Each account has its own card in the tab, titled with its label ("Unnamed account" if the label is empty). A line after the last card says that everything below applies to every account. Each account has these settings:
 
 | Setting | Default | What it does |
 | --- | --- | --- |
@@ -306,7 +307,7 @@ These settings appear when "Sync transcripts" is on.
 | --- | --- | --- |
 | Clean up duplicates | Off | Moves an extra copy of a note to the trash, but only if nobody has edited it since the plugin wrote it. See [Duplicates](#duplicates). |
 
-The tab also lists the duplicates found in the last sync on this device.
+The tab also lists the duplicates found in the last sync on this device. Clicking a file in the list closes the settings window and opens the file.
 
 ### Advanced
 

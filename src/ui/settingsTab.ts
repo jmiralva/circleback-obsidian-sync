@@ -1,6 +1,7 @@
 // The settings tab. It only builds the page and passes edits on: what an edit does lives in
-// settingsEdits.ts, what the page says and shows in settingsView.ts, and which settings need a
-// full sync in outputSettings.ts, all of which have tests. This file needs a DOM, so it has none.
+// settingsEdits.ts, what the page says and shows in settingsView.ts, which settings need a
+// full sync in outputSettings.ts, and closing the settings window in settingsWindow.ts, all of
+// which have tests. This file needs a DOM, so it has none.
 //
 // Saving is in settingsSaver.ts: toggles and dropdowns save at once, text and number fields once
 // typing pauses, and the tab asks the saver to save what is waiting before it redraws, starts a
@@ -28,12 +29,14 @@ import { SettingsSaver } from "./settingsSaver";
 import type { Edit, SettingsChange } from "./settingsSaver";
 import {
   REMOVE_ACCOUNT_TEXT,
+  accountTitle,
   fullSyncButtonText,
   fullSyncDescription,
   keyRowView,
   settingsVisibility,
 } from "./settingsView";
 import type { SettingsVisibility } from "./settingsView";
+import { closeSettingsWindow } from "./settingsWindow";
 
 type Settings = CirclebackSyncSettings;
 
@@ -47,6 +50,7 @@ type Options<K extends ChoiceField> = ReadonlyArray<readonly [Settings[K], strin
 
 const SAVE_DELAY_MS = 500;
 
+const SHARED_SETTINGS_NOTE = "Everything below applies to every account.";
 const NO_DUPLICATES = "No duplicates found in the last sync on this device.";
 // Kept as constants, not inline, so the sentence case check does not lowercase the brand name.
 const SELF_NAME_DESC =
@@ -163,11 +167,16 @@ export class CirclebackSettingTab extends PluginSettingTab {
           }),
       );
     for (const account of settings.accounts) this.accountBlock(el, account);
+    // The groups below Accounts are not per account, and nothing else on the page says so.
+    if (settings.accounts.length > 0) el.createEl("p", { text: SHARED_SETTINGS_NOTE, cls: "setting-item-description" });
   }
 
   private accountBlock(el: HTMLElement, account: AccountConfig): void {
     const block = el.createDiv({ cls: "circleback-sync-account" });
     const { id } = account;
+
+    // The title follows a label change at the next redraw, not while typing.
+    new Setting(block).setName(accountTitle(account.label)).setHeading().settingEl.addClass("circleback-sync-account-title");
 
     let label = account.label;
     new Setting(block)
@@ -558,6 +567,7 @@ export class CirclebackSettingTab extends PluginSettingTab {
     const link = item.createEl("a", { text: file.path, attr: { href: "#" } });
     link.addEventListener("click", (event) => {
       event.preventDefault();
+      closeSettingsWindow(this.app);
       void this.app.workspace.openLinkText(file.path, "", true);
     });
     if (kept) item.appendText(" (kept)");

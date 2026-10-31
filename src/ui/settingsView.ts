@@ -53,6 +53,15 @@ export function keyRowView(hasKey: boolean, state: AccountDeviceState): KeyRowVi
 export const REMOVE_ACCOUNT_TEXT =
   "Removes the account on every device that shares this vault, and its API key from this device. Its notes stay in the vault.";
 
+/** The title of an account's block in the settings tab when its label is empty. */
+export const UNNAMED_ACCOUNT = "Unnamed account";
+
+/** The title of an account's block: its label, or a stand-in when the label is empty. */
+export function accountTitle(label: string): string {
+  const trimmed = label.trim();
+  return trimmed === "" ? UNNAMED_ACCOUNT : trimmed;
+}
+
 export function removeAccountTitle(label: string): string {
   return `Remove "${label}"?`;
 }
