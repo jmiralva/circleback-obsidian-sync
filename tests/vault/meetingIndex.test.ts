@@ -54,6 +54,28 @@ describe("MeetingIndex", () => {
     expect(index.keys()).toEqual([]);
   });
 
+  it("stops handing out a file moved out of the configured folders after it was built", async () => {
+    const app = createFakeApp({
+      files: {
+        "Circleback/Standup.md": pluginFile({ id: "m1" }),
+        "Circleback/Standup copy.md": pluginFile({ id: "m1" }),
+        "Circleback/Solo.md": pluginFile({ id: "m2" }),
+      },
+    });
+    const index = await built(app);
+    await app.vault.createFolder("Archive");
+    await app.fileManager.renameFile(file(app, "Circleback/Standup copy.md"), "Archive/Standup copy.md");
+    await app.fileManager.renameFile(file(app, "Circleback/Solo.md"), "Archive/Solo.md");
+
+    expect(paths(index.find("m1", "note"))).toEqual(["Circleback/Standup.md"]);
+    expect(index.find("m2", "note")).toEqual([]);
+    expect(index.keys()).toEqual([{ id: "m1", kind: "note" }]);
+
+    // Moved back in, it counts again.
+    await app.fileManager.renameFile(file(app, "Archive/Solo.md"), "Circleback/Solo.md");
+    expect(paths(index.find("m2", "note"))).toEqual(["Circleback/Solo.md"]);
+  });
+
   it("does not confuse a note and its transcript", async () => {
     const app = createFakeApp({
       files: {

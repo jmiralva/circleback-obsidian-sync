@@ -4,7 +4,8 @@
 // Only files inside the sync folders (see `settings/syncFolders`) are indexed. A file moved out
 // of them is not, even though the metadata cache still knows its frontmatter: it is the user's
 // now, so the plugin never writes, renames, reports or trashes it, and the meeting gets a fresh
-// file in the sync folders.
+// file in the sync folders. A file moved out after `build` (during a long full sync, say) is
+// no longer handed out by `find` or counted by `keys`.
 //
 // A file is indexed when its frontmatter has a string `circleback_id` and a `circleback_kind`
 // that is one of the three kinds. The index is keyed by (id, kind): a meeting's note and its
@@ -14,7 +15,6 @@
 // Obsidian's metadata cache lags behind writes, and is empty at startup. Two things cover for it:
 // `build` reads and parses any file in the sync folders that the cache has no entry for, and
 // `upsert` / `forget` let the code that writes or trashes a file during a run tell the index at once.
-import { normalizePath } from "obsidian";
 import type { App, TFile } from "obsidian";
 import { isFileKind, type FileKind } from "../format/fields";
 import { isInFolders } from "../settings/syncFolders";
@@ -62,8 +62,9 @@ export class MeetingIndex {
   private readonly groups = new Map<string, Group>();
 
   /**
-   * @param folders The sync folders, read on every `build` and `upsert`. "" (or "/") is the whole
-   * vault. A file outside them is never indexed, even when the metadata cache knows its frontmatter.
+   * @param folders The sync folders, read whenever the index looks at a file's path. "" (or "/")
+   * is the whole vault. A file outside them is never indexed, even when the metadata cache knows
+   * its frontmatter, and never handed out.
    */
   constructor(
     private readonly app: App,
@@ -76,7 +77,7 @@ export class MeetingIndex {
    * have reached it yet). A file that cannot be read is skipped and logged.
    */
   async build(): Promise<void> {
-    const folders = this.syncFolders();
+    const folders = this.folders();
     const found: Array<[TFile, Record<string, unknown>]> = [];
 
     for (const file of this.app.vault.getMarkdownFiles()) {
@@ -103,16 +104,16 @@ export class MeetingIndex {
   }
 
   /**
-   * Every file for this meeting and kind, oldest `circleback_first_synced` first. A file with
-   * no first_synced comes after those that have one. On a tie (both missing included), the shorter
-   * path comes first, then the lower path by code unit. A hand copy (`X copy.md` from Finder,
-   * `X 1.md` from Obsidian) keeps the original's first_synced, so its longer path sorts it after
-   * `X.md`. Every device sorts the same way.
+   * Every file for this meeting and kind that is still in the sync folders, oldest
+   * `circleback_first_synced` first. A file with no first_synced comes after those that have one.
+   * On a tie (both missing included), the shorter path comes first, then the lower path by code
+   * unit. A hand copy (`X copy.md` from Finder, `X 1.md` from Obsidian) keeps the original's
+   * first_synced, so its longer path sorts it after `X.md`. Every device sorts the same way.
    */
   find(id: string, kind: Kind): TFile[] {
     const group = this.groups.get(groupKey(id, kind));
     if (!group) return [];
-    const stamped = [...group.files].map((file) => ({
+    const stamped = this.inSyncFolders(group.files).map((file) => ({
       file,
       synced: firstSynced(this.entries.get(file)?.frontmatter ?? {}),
     }));
@@ -135,9 +136,10 @@ export class MeetingIndex {
     return this.entries.get(file)?.frontmatter ?? null;
   }
 
-  /** Every (id, kind) the index holds, sorted by id then kind. */
+  /** Every (id, kind) the index holds a file in the sync folders for, sorted by id then kind. */
   keys(): MeetingKey[] {
     return [...this.groups.values()]
+      .filter((group) => this.inSyncFolders(group.files).length > 0)
       .map(({ id, kind }) => ({ id, kind }))
       .sort((a, b) => compareText(a.id, b.id) || compareText(a.kind, b.kind));
   }
@@ -150,7 +152,7 @@ export class MeetingIndex {
    */
   upsert(file: TFile, frontmatter: Record<string, unknown> | null): void {
     this.forget(file);
-    if (frontmatter === null || !isInFolders(file.path, this.syncFolders())) return;
+    if (frontmatter === null || !isInFolders(file.path, this.folders())) return;
     const key = meetingKeyOf(frontmatter);
     if (key === null) return;
 
@@ -174,8 +176,9 @@ export class MeetingIndex {
     if (entry.group.files.size === 0) this.groups.delete(groupKey(entry.group.id, entry.group.kind));
   }
 
-  /** The sync folders, normalized: the vault root, whatever it was spelled as, is "/". */
-  private syncFolders(): string[] {
-    return this.folders().map((folder) => normalizePath(folder));
+  /** The files that are, where they are now, still in the sync folders: the user may have moved one out since. */
+  private inSyncFolders(files: Iterable<TFile>): TFile[] {
+    const folders = this.folders();
+    return [...files].filter((file) => isInFolders(file.path, folders));
   }
 }

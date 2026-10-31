@@ -4,6 +4,7 @@
 // user's from then on: it is never updated, renamed, reported as a duplicate or trashed, and the
 // meeting gets a fresh file inside them at the next sync that covers it. The sync engine uses
 // these folders to build its index, and the settings tab to tell whether a change leaves files behind.
+import { normalizePath } from "obsidian";
 import type { CirclebackSyncSettings } from "./types";
 
 /**
@@ -19,9 +20,14 @@ export function syncFolders(settings: CirclebackSyncSettings, dailyFolder: strin
 }
 
 /**
- * Whether a vault path (a file or a folder) is one of `folders` or inside one, at any depth.
- * The folders must be normalized (`normalizePath`), so the vault root is "/".
+ * Whether a vault path (a file or a folder) is one of `folders` or inside one, at any depth. The
+ * path and the folders may be spelled as the settings spell them: "" (or "/") is the whole vault,
+ * and stray slashes do not matter.
  */
 export function isInFolders(path: string, folders: readonly string[]): boolean {
-  return folders.some((folder) => folder === "/" || path === folder || path.startsWith(`${folder}/`));
+  const target = normalizePath(path);
+  return folders.some((spelled) => {
+    const folder = normalizePath(spelled);
+    return folder === "/" || target === folder || target.startsWith(`${folder}/`);
+  });
 }

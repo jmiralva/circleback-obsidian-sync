@@ -9,7 +9,6 @@
 // A change can also leave a folder outside the sync folders, the folders whose files count as
 // the meetings' files. The notes there are no longer updated, and their meetings get new notes in
 // the new folder as they sync, so the user is told that too.
-import { normalizePath } from "obsidian";
 import { isInFolders, syncFolders } from "../settings/syncFolders";
 import type { CirclebackSyncSettings } from "../settings/types";
 
@@ -72,8 +71,6 @@ export function changedPlacementSettings(prev: CirclebackSyncSettings, next: Cir
  * leaves every file counted, so it does not count.
  */
 export function syncFolderDropped(prev: CirclebackSyncSettings, next: CirclebackSyncSettings): boolean {
-  const normalized = (settings: CirclebackSyncSettings): string[] =>
-    syncFolders(settings, DAILY_NOTES_FOLDER).map((folder) => normalizePath(folder));
-  const after = normalized(next);
-  return normalized(prev).some((folder) => !isInFolders(folder, after));
+  const after = syncFolders(next, DAILY_NOTES_FOLDER);
+  return syncFolders(prev, DAILY_NOTES_FOLDER).some((folder) => !isInFolders(folder, after));
 }

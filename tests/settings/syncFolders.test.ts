@@ -47,8 +47,17 @@ describe("isInFolders", () => {
     expect(isInFolders("Standup.md", [])).toBe(false);
   });
 
-  it("treats / as the whole vault", () => {
-    expect(isInFolders("Standup.md", ["/"])).toBe(true);
-    expect(isInFolders("Anywhere/at/all.md", ["Circleback", "/"])).toBe(true);
+  it("treats / and an empty folder, as the settings spell the vault root, as the whole vault", () => {
+    for (const root of ["/", ""]) {
+      expect(isInFolders("Standup.md", [root])).toBe(true);
+      expect(isInFolders("Anywhere/at/all.md", ["Circleback", root])).toBe(true);
+    }
+  });
+
+  it("does not mind stray slashes in the folders or the path", () => {
+    expect(isInFolders("Circleback/Standup.md", ["/Circleback/"])).toBe(true);
+    expect(isInFolders("/Circleback/", ["Circleback"])).toBe(true);
+    expect(isInFolders("Circleback Archive", ["/Circleback/"])).toBe(false);
+    expect(isInFolders("", ["Circleback"])).toBe(false);
   });
 });

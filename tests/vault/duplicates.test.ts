@@ -83,6 +83,22 @@ describe("findDuplicates", () => {
     expect(app.exists("Circleback/Standup.md")).toBe(true);
   });
 
+  it("leaves out a copy moved out of the sync folders after the index was built, and never trashes it", async () => {
+    const app = createFakeApp({ files: twoCopies() });
+    const index = new MeetingIndex(app, () => ["Circleback"]);
+    await index.build();
+    await app.vault.createFolder("Archive");
+    await app.fileManager.renameFile(file(app, COPY), "Archive/b copy.md");
+    const trashFile = jest.spyOn(app.fileManager, "trashFile");
+
+    const groups = findDuplicates(index);
+    await cleanUpDuplicates(app, groups, index);
+
+    expect(groups).toEqual([]);
+    expect(trashFile).not.toHaveBeenCalled();
+    expect(app.exists("Archive/b copy.md")).toBe(true);
+  });
+
   it("ignores meetings with one file, and a note and its transcript are not duplicates", async () => {
     const app = createFakeApp({
       files: {

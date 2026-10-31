@@ -642,15 +642,21 @@ export class CirclebackSettingTab extends PluginSettingTab {
 
   /**
    * What the settings changed in this visit mean for existing notes (`settingsChangeNotice` picks
-   * the words). A change to what notes say gets a notice that stays until it is dismissed or its
-   * button is used, since a full sync is what updates the older notes. A change only to folders
-   * and file names has nothing to offer: no sync moves or renames an existing note, so the notice
-   * is plain and goes by itself.
+   * the words, the button and how long the notice stays).
+   * - A change to what notes say offers a full sync, since a full sync is what updates the older
+   *   notes, and stays until it is dismissed or its button is used.
+   * - A sync folder that dropped out, with no such change, also stays until dismissed: the notes
+   *   there are no longer updated. It has no button because nothing needs a full sync: meetings get
+   *   new notes in the new folder as they sync, and a full sync from Advanced only does it sooner.
+   * - A change only to subfolders and file names goes by itself: every note is still in the sync
+   *   folders and still updated, and a full sync would not move or rename one.
    */
   private showChangeNotice(change: SettingsChange): void {
-    const { text, offerFullSync } = settingsChangeNotice(change);
+    const { text, offerFullSync, untilDismissed } = settingsChangeNotice(change);
+    // 0 keeps a notice until it is dismissed; undefined is Obsidian's usual few seconds.
+    const duration = untilDismissed ? 0 : undefined;
     if (!offerFullSync) {
-      new Notice(text);
+      new Notice(text, duration);
       return;
     }
     const fragment = createFragment((content) => {
@@ -661,6 +667,6 @@ export class CirclebackSettingTab extends PluginSettingTab {
         notice.hide();
       });
     });
-    const notice = new Notice(fragment, 0);
+    const notice = new Notice(fragment, duration);
   }
 }

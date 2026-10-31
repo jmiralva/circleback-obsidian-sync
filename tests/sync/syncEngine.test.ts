@@ -1167,7 +1167,8 @@ describe("files moved out of the sync folders", () => {
       settings: { cleanUpDuplicates: true },
     });
     await sync(engine);
-    // An untouched copy: clean-up would trash it if it counted as a duplicate.
+    // If the moved copy still counted, it would be the keeper (its first_synced is the earlier one),
+    // and clean-up would trash the fresh note, which nobody has touched.
     await move(app, notePath("m1"), MOVED);
     const movedText = app.fileText(MOVED);
     const trash = jest.spyOn(app.fileManager, "trashFile");
@@ -1181,6 +1182,35 @@ describe("files moved out of the sync folders", () => {
     expect(trash).not.toHaveBeenCalled();
     expect(app.fileText(MOVED)).toBe(movedText);
     expect(app.exists(notePath("m1"))).toBe(true);
+  });
+
+  it("stops counting a note moved out during a full sync, and never trashes it", async () => {
+    const COPY = "Circleback/Meeting m1 copy.md";
+    const { app, engine, server, settings } = setup({
+      servers: { a: { email: A_EMAIL, pages: [[meeting("m1")], [meeting("m2")]] } },
+    });
+    await sync(engine);
+    // An exact hand copy of m1's note: untouched, so clean-up would trash it while it counts.
+    await app.vault.create(COPY, app.fileText(notePath("m1")));
+    const copyText = app.fileText(COPY);
+    const m2Text = app.fileText(notePath("m2"));
+    settings.cleanUpDuplicates = true;
+    // The user files both away while the full sync is between its two pages.
+    server("a").beforePage = async (index) => {
+      if (index !== 1) return;
+      await move(app, COPY, "Archive/Meeting m1 copy.md");
+      await move(app, notePath("m2"), "Archive/Meeting m2.md");
+    };
+    const trash = jest.spyOn(app.fileManager, "trashFile");
+
+    const result = await fullSync(engine);
+
+    expect(result.duplicates).toEqual([]);
+    expect(trash).not.toHaveBeenCalled();
+    expect(app.fileText("Archive/Meeting m1 copy.md")).toBe(copyText);
+    // m2 was written after its note was moved out: a fresh note, and the moved one as it was.
+    expect(app.fileText("Archive/Meeting m2.md")).toBe(m2Text);
+    expect(frontmatter(app, notePath("m2")).circleback_id).toBe("m2");
   });
 
   it("writes the fresh note for a meeting outside the sync window only at a full sync", async () => {

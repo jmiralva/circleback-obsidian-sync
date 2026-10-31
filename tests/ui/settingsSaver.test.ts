@@ -339,8 +339,12 @@ describe("the notice when the tab closes", () => {
     return change === undefined ? null : settingsChangeNotice(change);
   }
 
-  const FULL_SYNC = (text: string): Notice => ({ text, offerFullSync: true });
-  const PLAIN = (text: string): Notice => ({ text, offerFullSync: false });
+  // With a "Run full sync" button, staying until it is dismissed or the button is used.
+  const FULL_SYNC = (text: string): Notice => ({ text, offerFullSync: true, untilDismissed: true });
+  // No button, staying until it is dismissed: it says notes are no longer updated.
+  const LASTING = (text: string): Notice => ({ text, offerFullSync: false, untilDismissed: true });
+  // No button, going by itself.
+  const PLAIN = (text: string): Notice => ({ text, offerFullSync: false, untilDismissed: false });
 
   it("offers a full sync for a content change", async () => {
     expect(await noticeAfter([set("includeInsights", false)])).toEqual(FULL_SYNC(OUTPUT_CHANGE_NOTICE));
@@ -356,14 +360,14 @@ describe("the notice when the tab closes", () => {
     );
   });
 
-  it("says the old folder's notes are no longer updated when the base folder changed", async () => {
-    expect(await noticeAfter([set("customBaseFolder", "Meetings")])).toEqual(PLAIN(FOLDER_CHANGE_NOTICE));
-    expect(await noticeAfter([set("baseFolderType", "daily-notes")])).toEqual(PLAIN(FOLDER_CHANGE_NOTICE));
+  it("says the old folder's notes are no longer updated when the base folder changed, until dismissed", async () => {
+    expect(await noticeAfter([set("customBaseFolder", "Meetings")])).toEqual(LASTING(FOLDER_CHANGE_NOTICE));
+    expect(await noticeAfter([set("baseFolderType", "daily-notes")])).toEqual(LASTING(FOLDER_CHANGE_NOTICE));
   });
 
   it("says so too when the transcript base folder changed, if it was outside the base folder", async () => {
     const outside = await noticeAfter([set("customTranscriptBaseFolder", "Calls")], { customTranscriptBaseFolder: "Transcripts" });
-    expect(outside).toEqual(PLAIN(FOLDER_CHANGE_NOTICE));
+    expect(outside).toEqual(LASTING(FOLDER_CHANGE_NOTICE));
     // The default transcript folder is inside the base folder, which still holds its transcripts.
     expect(await noticeAfter([set("customTranscriptBaseFolder", "Transcripts")])).toEqual(PLAIN(PLACEMENT_CHANGE_NOTICE));
   });
@@ -483,6 +487,7 @@ describe("rebase", () => {
     expect(settingsChangeNotice(onSettingsChanged.mock.calls[0][0] as SettingsChange)).toEqual({
       text: FOLDER_CHANGE_NOTICE,
       offerFullSync: false,
+      untilDismissed: true,
     });
   });
 

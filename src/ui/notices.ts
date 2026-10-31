@@ -36,7 +36,10 @@ export const PLACEMENT_CHANGE_NOTICE =
 /** Added to the full sync notice when a folder dropped out of the sync folders: its notes no longer count. */
 export const FOLDER_NOTICE_SUFFIX = " Notes in the old folder stay where they are and are no longer updated.";
 export const OUTPUT_AND_FOLDER_CHANGE_NOTICE = OUTPUT_CHANGE_NOTICE + FOLDER_NOTICE_SUFFIX;
-/** Shown, with no button, when a folder dropped out of the sync folders and no setting that shapes the text changed. */
+/**
+ * Shown, with no button and until dismissed, when a folder dropped out of the sync folders and no
+ * setting that shapes the text changed.
+ */
 export const FOLDER_CHANGE_NOTICE =
   "Circleback Sync: meetings will get new notes in the new folder as they sync." + FOLDER_NOTICE_SUFFIX;
 export const SETTINGS_NOT_SAVED = "Circleback Sync: could not save the settings.";
@@ -44,20 +47,32 @@ export const LOGS_COPIED = "Circleback Sync: logs copied. API keys are removed f
 export const LOGS_NOT_COPIED = "Circleback Sync: could not copy the logs.";
 export const KEY_NOT_SAVED = "Circleback Sync: could not save the API key.";
 
+/** The notice the settings tab shows when it closes after a change. */
+export interface SettingsChangeNotice {
+  text: string;
+  /** Whether it has a "Run full sync" button. */
+  offerFullSync: boolean;
+  /** Whether it stays until it is dismissed (or its button is used), instead of going by itself. */
+  untilDismissed: boolean;
+}
+
 /**
- * What to tell the user when the settings tab closes after `change`, and whether to offer a full
- * sync. A full sync is offered only when a setting that shapes the text of the notes changed.
- * When a folder dropped out of the sync folders, the notice says that the notes there are no
- * longer updated. Otherwise a change of folders or file names only affects new notes, which keep
- * being updated where they are.
+ * What to tell the user when the settings tab closes after `change`. A full sync is offered only
+ * when a setting that shapes the text of the notes changed, and that notice stays until it is
+ * dismissed or used. When a folder dropped out of the sync folders, the notice says the notes
+ * there are no longer updated, and stays until dismissed so that is not missed. Otherwise a change
+ * of folders or file names only affects new notes, which keep being updated where they are, and
+ * the notice goes by itself.
  */
-export function settingsChangeNotice(change: SettingsChange): { text: string; offerFullSync: boolean } {
+export function settingsChangeNotice(change: SettingsChange): SettingsChangeNotice {
   if (change.output.length > 0) {
-    if (change.syncFolderDropped) return { text: OUTPUT_AND_FOLDER_CHANGE_NOTICE, offerFullSync: true };
-    if (change.placement.length > 0) return { text: OUTPUT_AND_PLACEMENT_CHANGE_NOTICE, offerFullSync: true };
-    return { text: OUTPUT_CHANGE_NOTICE, offerFullSync: true };
+    let text = OUTPUT_CHANGE_NOTICE;
+    if (change.syncFolderDropped) text = OUTPUT_AND_FOLDER_CHANGE_NOTICE;
+    else if (change.placement.length > 0) text = OUTPUT_AND_PLACEMENT_CHANGE_NOTICE;
+    return { text, offerFullSync: true, untilDismissed: true };
   }
-  return { text: change.syncFolderDropped ? FOLDER_CHANGE_NOTICE : PLACEMENT_CHANGE_NOTICE, offerFullSync: false };
+  if (change.syncFolderDropped) return { text: FOLDER_CHANGE_NOTICE, offerFullSync: false, untilDismissed: true };
+  return { text: PLACEMENT_CHANGE_NOTICE, offerFullSync: false, untilDismissed: false };
 }
 
 const REASONS: Record<AccountErrorKind, string> = {
