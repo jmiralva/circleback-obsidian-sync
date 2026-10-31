@@ -57,7 +57,9 @@ export const MEETING_START_FIELD = "createdAt" satisfies MeetingStartField;
 
 /**
  * Statuses that mean the key is wrong or revoked, as opposed to "not allowed to see this" (403).
- * An invalid key gets 401 with `{"error":"The provided API key is invalid."}`.
+ * An invalid key gets 401 with `{"error":"The provided API key is invalid."}`. A malformed one
+ * gets 400 with `{"error":"The provided token is invalid."}`, which `HttpClient` also treats as a
+ * rejected key; it is told apart from other 400s by its error text, so 400 is not listed here.
  */
 export const AUTH_ERROR_STATUSES: number[] = [401];
 

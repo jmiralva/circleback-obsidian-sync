@@ -50,6 +50,11 @@ const FALLBACK_WAIT_SECONDS = 5;
 const MAX_WAIT_MS = 120_000;
 const MAX_REASON_LENGTH = 200;
 const KEY_PATTERN = /cb_[A-Za-z0-9_-]+/g;
+/**
+ * A key that is not shaped like a key (text pasted along with it, say) gets 400 with
+ * `{"error":"The provided token is invalid."}`, not the 401 that a well-formed wrong key gets.
+ */
+const MALFORMED_KEY_STATUS = 400;
 /** Real keys are far longer. A shorter string would mangle messages that merely contain it. */
 const MIN_REDACTED_KEY_LENGTH = 8;
 
@@ -61,6 +66,11 @@ export function getHeader(headers: Record<string, string> | undefined, name: str
     if (key.toLowerCase() === wanted) return headers[key];
   }
   return undefined;
+}
+
+/** Whether the API's own explanation of a 400 says the token or API key is invalid. */
+function saysKeyIsInvalid(reason: string | undefined): boolean {
+  return reason !== undefined && /token|api key/i.test(reason) && /invalid/i.test(reason);
 }
 
 /** A non-negative number of seconds, or undefined if the header is missing or not one. */
@@ -273,7 +283,7 @@ export class HttpClient {
         throw new CirclebackError("invalid-response", `Circleback sent a response that is not valid JSON (HTTP ${status}).`, status);
       }
     }
-    if (AUTH_ERROR_STATUSES.includes(status)) {
+    if (this.#rejectsKey(response)) {
       throw new CirclebackError("auth", `Circleback rejected the API key (HTTP ${status}). Check the key in the plugin settings.`, status);
     }
     if (status === 403) {
@@ -288,6 +298,12 @@ export class HttpClient {
       `Circleback sent an unexpected response (HTTP ${status})${reason ? `: ${reason}` : "."}`,
       status,
     );
+  }
+
+  /** Whether a failed response says the key was not accepted: a 401, or the 400 that a malformed key gets. */
+  #rejectsKey({ status, text }: HttpResponse): boolean {
+    if (AUTH_ERROR_STATUSES.includes(status)) return true;
+    return status === MALFORMED_KEY_STATUS && saysKeyIsInvalid(this.#reasonFrom(text));
   }
 
   /** The API's own explanation (`{ "error": "..." }`) from an error body, if there is one. */

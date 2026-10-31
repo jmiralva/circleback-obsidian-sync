@@ -354,7 +354,7 @@ The notice and the account's status line under its API key name the reason. The 
 
 | Reason | What to do |
 | --- | --- |
-| the API key was not accepted | The key is wrong, or may have been revoked in Circleback. Paste a working key in the plugin settings. |
+| the API key was not accepted | The key is wrong, is malformed (for example, extra text was pasted with it), or may have been revoked in Circleback. Paste a working key in the plugin settings. |
 | Circleback refused access | The key is valid, but Circleback says it may not view what was asked for. Check in Circleback that the key's owner can open those meetings. |
 | Circleback's rate limit was reached | Circleback limits how many requests an account can make, shared across all its API keys and tools. The plugin spaces out its requests and waits when told to. It tries again at the next sync. A long full sync, or a short sync interval, makes this more likely. |
 | Circleback did not answer in time | The plugin waits up to 60 seconds for each request. It tries again at the next sync. |

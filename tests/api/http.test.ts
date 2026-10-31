@@ -156,6 +156,53 @@ describe("HttpClient: status mapping", () => {
     expect(error.message).toContain("statuses is not valid");
   });
 
+  // Circleback answers a key that is not shaped like a key with 400, not 401.
+  it.each([
+    ["the token message", "The provided token is invalid."],
+    ["the API key message", "The provided API key is invalid."],
+    ["different capitals", "INVALID Token"],
+    ["API key in other words", "Invalid api key format"],
+  ])("maps a 400 that says the key is invalid (%s) to auth, like a 401", async (_label, error) => {
+    const { client } = setup([{ status: 400, body: { error } }]);
+    const rejected = await failure(client.getJson("/meetings"));
+    expect(rejected).toMatchObject({ kind: "auth", status: 400 });
+    // The words of a 401, with the status that came.
+    expect(rejected.message).toBe("Circleback rejected the API key (HTTP 400). Check the key in the plugin settings.");
+
+    const { client: other } = setup([{ status: 401 }]);
+    expect((await failure(other.getJson("/meetings"))).message).toBe(
+      "Circleback rejected the API key (HTTP 401). Check the key in the plugin settings.",
+    );
+  });
+
+  it.each([
+    ["another error text", { status: 400, body: { error: "statuses is not valid" } }],
+    ["a token that is not called invalid", { status: 400, body: { error: "A token is required." } }],
+    ["something else that is invalid", { status: 400, body: { error: "The cursor is invalid." } }],
+    ["no error text", { status: 400, body: {} }],
+    ["an error that is not text", { status: 400, body: { error: { token: "invalid" } } }],
+    ["no JSON body", { status: 400, text: "<html>Bad request</html>" }],
+    ["an empty body", { status: 400, text: "" }],
+  ] satisfies [string, Reply][])("keeps a 400 with %s as invalid-response", async (_label, step) => {
+    const { client } = setup([step]);
+    expect(await failure(client.getJson("/meetings"))).toMatchObject({ kind: "invalid-response", status: 400 });
+  });
+
+  it("maps only a 400 that way: the same words on another status keep that status's mapping", async () => {
+    const body = { error: "The provided token is invalid." };
+    const { client: notFound } = setup([{ status: 404, body }]);
+    expect(await failure(notFound.getJson("/meetings"))).toMatchObject({ kind: "invalid-response", status: 404 });
+    const { client: server } = setup([{ status: 500, body }]);
+    expect(await failure(server.getJson("/meetings"))).toMatchObject({ kind: "server", status: 500 });
+  });
+
+  it("does not put the API key in the message of a 400 mapped to auth", async () => {
+    const { client } = setup([{ status: 400, body: { error: `The provided token ${KEY} is invalid.` } }]);
+    const error = await failure(client.getJson("/meetings"));
+    expect(error.kind).toBe("auth");
+    expect(error.message).not.toContain(KEY);
+  });
+
   it("maps an error status with an unreadable body to invalid-response without a reason", async () => {
     const { client } = setup([{ status: 404, text: "<html>Not found</html>" }]);
     const error = await failure(client.getJson("/meetings"));
