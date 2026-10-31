@@ -192,7 +192,7 @@ Happy to. Let's start with the roadmap.
 - **Renames.** If a meeting's title or date changes in Circleback, the plugin renames the note, inside its folder, but only if the note is still where and what the plugin named it. A note you renamed keeps your name.
 - **Names.** Characters that file systems or wikilinks do not allow (`/ \ : * ? " < > | # ^ [ ]`) become `_`, and a title is cut to 200 characters. If another meeting already has the name, the plugin adds the meeting's date and time before `.md`.
 - **A note you delete comes back** at the next sync, if its meeting is still inside the sync history window. A full sync brings back every note.
-- **A meeting deleted in Circleback** leaves its note in your vault. Apart from the optional duplicate clean-up below, the plugin deletes only a file it has just created and could not finish: if writing the frontmatter fails right after it creates a file, it moves that half-written file to the trash.
+- **A meeting deleted in Circleback** leaves its note in your vault. Apart from the optional duplicate clean-up below, the plugin never deletes a file.
 
 ## Daily notes
 
