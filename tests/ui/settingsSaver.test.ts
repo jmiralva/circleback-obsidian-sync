@@ -1,6 +1,14 @@
 import { DEFAULT_SETTINGS } from "../../src/settings/types";
 import type { CirclebackSyncSettings } from "../../src/settings/types";
-import { SettingsSaver, type Edit } from "../../src/ui/settingsSaver";
+import {
+  FOLDER_CHANGE_NOTICE,
+  OUTPUT_AND_FOLDER_CHANGE_NOTICE,
+  OUTPUT_AND_PLACEMENT_CHANGE_NOTICE,
+  OUTPUT_CHANGE_NOTICE,
+  PLACEMENT_CHANGE_NOTICE,
+  settingsChangeNotice,
+} from "../../src/ui/notices";
+import { SettingsSaver, type Edit, type SettingsChange } from "../../src/ui/settingsSaver";
 import { withField } from "../../src/ui/settingsEdits";
 import { debounce } from "../__mocks__/obsidian";
 
@@ -176,7 +184,7 @@ describe("closing", () => {
 
     expect(store.current.filenamePattern).toBe("{date}");
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
-    expect(onSettingsChanged).toHaveBeenCalledWith({ output: [], placement: ["filenamePattern"] });
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: [], placement: ["filenamePattern"], syncFolderDropped: false });
   });
 
   it("waits for a save that is still running", async () => {
@@ -189,7 +197,7 @@ describe("closing", () => {
     await jest.advanceTimersByTimeAsync(100);
     await closed;
 
-    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["saveAs"], placement: [] });
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["saveAs"], placement: [], syncFolderDropped: false });
   });
 
   it("reports once for a whole session of edits, each kind in the order of its list", async () => {
@@ -207,6 +215,7 @@ describe("closing", () => {
     expect(onSettingsChanged).toHaveBeenCalledWith({
       output: ["syncTranscripts", "includeInsights", "selfLabel"],
       placement: ["filenamePattern"],
+      syncFolderDropped: false,
     });
   });
 
@@ -222,6 +231,7 @@ describe("closing", () => {
     expect(onSettingsChanged).toHaveBeenCalledWith({
       output: [],
       placement: ["baseFolderType", "customTranscriptBaseFolder"],
+      syncFolderDropped: true,
     });
   });
 
@@ -232,7 +242,7 @@ describe("closing", () => {
     await saver.commit(set("includePrivateNotes", true));
     await saver.close();
 
-    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["includePrivateNotes"], placement: [] });
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["includePrivateNotes"], placement: [], syncFolderDropped: false });
   });
 
   it("says nothing when only settings that do not shape the notes changed", async () => {
@@ -287,7 +297,7 @@ describe("closing", () => {
     await saver.close();
 
     expect(onSettingsChanged).toHaveBeenCalledTimes(2);
-    expect(onSettingsChanged).toHaveBeenLastCalledWith({ output: ["includeInsights"], placement: [] });
+    expect(onSettingsChanged).toHaveBeenLastCalledWith({ output: ["includeInsights"], placement: [], syncFolderDropped: false });
   });
 
   it("flushes even if the tab was never opened, and reports nothing", async () => {
@@ -312,6 +322,65 @@ describe("closing", () => {
   });
 });
 
+describe("the notice when the tab closes", () => {
+  type Notice = ReturnType<typeof settingsChangeNotice>;
+
+  /**
+   * Opens the tab on `start` (the defaults with these changes), makes the edits, closes it, and
+   * returns the notice the tab shows for what changed, or null when it shows none.
+   */
+  async function noticeAfter(edits: Edit[], start: Partial<CirclebackSyncSettings> = {}): Promise<Notice | null> {
+    const { saver, onSettingsChanged, store } = setup();
+    store.current = { ...store.current, ...start };
+    saver.open();
+    for (const edit of edits) await saver.commit(edit);
+    await saver.close();
+    const [change] = (onSettingsChanged.mock.calls[0] ?? []) as [SettingsChange?];
+    return change === undefined ? null : settingsChangeNotice(change);
+  }
+
+  const FULL_SYNC = (text: string): Notice => ({ text, offerFullSync: true });
+  const PLAIN = (text: string): Notice => ({ text, offerFullSync: false });
+
+  it("offers a full sync for a content change", async () => {
+    expect(await noticeAfter([set("includeInsights", false)])).toEqual(FULL_SYNC(OUTPUT_CHANGE_NOTICE));
+  });
+
+  it("keeps the old texts when only subfolder or file name patterns changed: those notes are still in the sync folders", async () => {
+    expect(await noticeAfter([set("filenamePattern", "{date} {title}")])).toEqual(PLAIN(PLACEMENT_CHANGE_NOTICE));
+    expect(await noticeAfter([set("subfolderPattern", "month"), set("transcriptFilenamePattern", "{title} t")])).toEqual(
+      PLAIN(PLACEMENT_CHANGE_NOTICE),
+    );
+    expect(await noticeAfter([set("includeInsights", false), set("subfolderPattern", "month")])).toEqual(
+      FULL_SYNC(OUTPUT_AND_PLACEMENT_CHANGE_NOTICE),
+    );
+  });
+
+  it("says the old folder's notes are no longer updated when the base folder changed", async () => {
+    expect(await noticeAfter([set("customBaseFolder", "Meetings")])).toEqual(PLAIN(FOLDER_CHANGE_NOTICE));
+    expect(await noticeAfter([set("baseFolderType", "daily-notes")])).toEqual(PLAIN(FOLDER_CHANGE_NOTICE));
+  });
+
+  it("says so too when the transcript base folder changed, if it was outside the base folder", async () => {
+    const outside = await noticeAfter([set("customTranscriptBaseFolder", "Calls")], { customTranscriptBaseFolder: "Transcripts" });
+    expect(outside).toEqual(PLAIN(FOLDER_CHANGE_NOTICE));
+    // The default transcript folder is inside the base folder, which still holds its transcripts.
+    expect(await noticeAfter([set("customTranscriptBaseFolder", "Transcripts")])).toEqual(PLAIN(PLACEMENT_CHANGE_NOTICE));
+  });
+
+  it("adds it to the full sync notice when a content setting changed too", async () => {
+    expect(await noticeAfter([set("includeInsights", false), set("customBaseFolder", "Meetings")])).toEqual(
+      FULL_SYNC(OUTPUT_AND_FOLDER_CHANGE_NOTICE),
+    );
+    // A content setting can drop a sync folder by itself: leaving sections mode leaves out the daily notes folder.
+    expect(await noticeAfter([set("saveAs", "files")], { saveAs: "sections" })).toEqual(FULL_SYNC(OUTPUT_AND_FOLDER_CHANGE_NOTICE));
+  });
+
+  it("says nothing when the base folder was changed and changed back", async () => {
+    expect(await noticeAfter([set("customBaseFolder", "Meetings"), set("customBaseFolder", "Circleback")])).toBeNull();
+  });
+});
+
 describe("opening", () => {
   it("is open from the first open() until close()", () => {
     const { saver } = setup();
@@ -333,7 +402,7 @@ describe("opening", () => {
     saver.open();
     await saver.close();
 
-    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["saveAs"], placement: [] });
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["saveAs"], placement: [], syncFolderDropped: false });
   });
 
   it("counts a new session at each open and each close, so late results can be told apart", () => {
@@ -373,7 +442,7 @@ describe("rebase", () => {
     await saver.close();
 
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
-    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["includeInsights"], placement: [] });
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: ["includeInsights"], placement: [], syncFolderDropped: false });
   });
 
   it("counts a text edit that is still waiting as made before it", async () => {
@@ -397,7 +466,24 @@ describe("rebase", () => {
     await saver.close();
 
     expect(onSettingsChanged).toHaveBeenCalledTimes(1);
-    expect(onSettingsChanged).toHaveBeenCalledWith({ output: [], placement: ["filenamePattern"] });
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: [], placement: ["filenamePattern"], syncFolderDropped: false });
+  });
+
+  it("does not count a dropped sync folder as dealt with, even when a content setting dropped it", async () => {
+    const { saver, onSettingsChanged, store } = setup();
+    store.current = { ...store.current, customTranscriptBaseFolder: "Transcripts" };
+    saver.open();
+    await saver.commit(set("transcriptHandling", "same-location"));
+
+    await saver.rebase();
+    await saver.close();
+
+    expect(onSettingsChanged).toHaveBeenCalledTimes(1);
+    expect(onSettingsChanged).toHaveBeenCalledWith({ output: [], placement: [], syncFolderDropped: true });
+    expect(settingsChangeNotice(onSettingsChanged.mock.calls[0][0] as SettingsChange)).toEqual({
+      text: FOLDER_CHANGE_NOTICE,
+      offerFullSync: false,
+    });
   });
 
   it("does nothing while the tab is closed", async () => {

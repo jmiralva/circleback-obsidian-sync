@@ -24,6 +24,7 @@ import { meetingTitle } from "../format/fields";
 import { buildNoteBody } from "../format/noteBody";
 import { findOwner, ownsMeeting } from "../format/owner";
 import type { KeyStore } from "../secrets/keyStore";
+import { syncFolders } from "../settings/syncFolders";
 import type { AccountConfig, CirclebackSyncSettings } from "../settings/types";
 import type { AccountDeviceState, DeviceState } from "../state/deviceState";
 import { logger } from "../util/logger";
@@ -458,7 +459,8 @@ export class SyncEngine {
   private async openRun(settings: CirclebackSyncSettings, force: boolean): Promise<Run> {
     const { app } = this.deps;
     const dailyFolder = (await readDailyNoteConfig(app)).folder;
-    const folders = indexFolders(settings, dailyFolder);
+    // Only files in the sync folders count: a meeting whose file was moved out gets a fresh one.
+    const folders = syncFolders(settings, dailyFolder);
     const index = new MeetingIndex(app, () => folders);
     await index.build();
     const now = this.deps.now();
@@ -534,18 +536,6 @@ function ownershipFor(settings: CirclebackSyncSettings): "Mine" | "All" {
 function writerSettingsFor(settings: CirclebackSyncSettings): CirclebackSyncSettings {
   if (settings.saveAs !== "sections" || settings.transcriptHandling !== "combined") return settings;
   return { ...settings, transcriptHandling: "same-location" };
-}
-
-/**
- * The folders the index reads directly when the metadata cache has not reached a file yet: where
- * notes go, where transcripts go when they have their own place, and the daily notes in sections
- * mode. "" is the vault root.
- */
-function indexFolders(settings: CirclebackSyncSettings, dailyFolder: string): string[] {
-  const folders = [settings.baseFolderType === "custom" ? settings.customBaseFolder : dailyFolder];
-  if (settings.transcriptHandling === "custom-location") folders.push(settings.customTranscriptBaseFolder);
-  if (settings.saveAs === "sections") folders.push(dailyFolder);
-  return folders;
 }
 
 /**

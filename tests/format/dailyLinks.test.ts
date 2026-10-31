@@ -1,14 +1,20 @@
-import { upsertLinkLines, type DailyLink } from "../../src/format/dailyLinks";
+import { upsertLinkLines, type DailyLink, type LinkTarget } from "../../src/format/dailyLinks";
 
-// Which meeting each link target belongs to. A target that is not here resolves to nothing,
-// like a link to a file with no `circleback_id`.
-const IDS: Record<string, string> = {
-  "Circleback/a": "a",
-  "Circleback/b": "b",
-  "Circleback/c": "c",
-  M: "m1",
+// The note each link target points to. A target that is not here resolves to nothing, like a
+// link to a file with no `circleback_id`.
+const NOTES: Record<string, LinkTarget> = {
+  "Circleback/a": { id: "a", path: "Circleback/a.md" },
+  "Circleback/b": { id: "b", path: "Circleback/b.md" },
+  "Circleback/c": { id: "c", path: "Circleback/c.md" },
+  M: { id: "m1", path: "M.md" },
+  // Meeting a's note as it was before the user moved it out of the sync folder: a file of
+  // meeting a, but not the one the plugin links to now.
+  "Archive/a": { id: "a", path: "Archive/a.md" },
+  "Other/a": { id: "a", path: "Other/a.md" },
+  // A short link that Obsidian resolves to the note in the sync folder.
+  a: { id: "a", path: "Circleback/a.md" },
 };
-const resolveId = (linkpath: string): string | null => IDS[linkpath] ?? null;
+const resolveId = (linkpath: string): LinkTarget | null => NOTES[linkpath] ?? null;
 
 const HEADING = "## Meetings";
 
@@ -90,6 +96,75 @@ describe("upsertLinkLines", () => {
   it("adds nothing when an own line for the meeting is already there", () => {
     const text = note(own("a", "09:00"), own("b", "10:00"));
     expect(add(text, link("b", "10:00"))).toBe(text);
+  });
+
+  describe("a meeting whose note moved out of the sync folder", () => {
+    it("points the plugin's own line for the meeting at the file being linked, in place", () => {
+      const text = note("- 09:00 - standup", "- 10:00 - [[Archive/a|A]]", own("b", "11:00"));
+      expect(add(text, link("a", "10:00"))).toBe(note("- 09:00 - standup", own("a", "10:00"), own("b", "11:00")));
+    });
+
+    it("writes the line as the plugin writes it now, with the current time, and keeps its place", () => {
+      const text = note("- 10:00 - [[Archive/a|A]]", own("b", "10:30"));
+      expect(add(text, link("a", "11:00"))).toBe(note(own("a", "11:00"), own("b", "10:30")));
+    });
+
+    it("leaves an own line whose alias is not the one the plugin writes now, and adds no second line", () => {
+      // The user changed the link's text, or the meeting was renamed since: either way it is not the plugin's to rewrite.
+      const text = note("- 10:00 - [[Archive/a|my notes on the call]]");
+      expect(add(text, link("a", "10:00"))).toBe(text);
+      expect(add(note("- 10:00 - [[Archive/a|Old title]]"), link("a", "10:00", "New title"))).toBe(
+        note("- 10:00 - [[Archive/a|Old title]]"),
+      );
+    });
+
+    it("compares the alias after the cleaning new lines get", () => {
+      const text = note("- 10:00 - [[Archive/a|Q3 [draft_ _ review]]");
+      expect(add(text, link("a", "10:00", "Q3 [draft] | review"))).toBe(note("- 10:00 - [[Circleback/a|Q3 [draft_ _ review]]"));
+    });
+
+    it("keeps the line ending and a missing newline at the end of the note", () => {
+      expect(add(`${HEADING}
+- 10:00 - [[Archive/a|A]]
+`, link("a", "10:00"))).toBe(`${HEADING}
+${own("a", "10:00")}
+`);
+      expect(add(`${HEADING}
+- 10:00 - [[Archive/a|A]]`, link("a", "10:00"))).toBe(`${HEADING}
+${own("a", "10:00")}`);
+    });
+
+    it("leaves an own line that already points to the file being linked, even as a short link", () => {
+      const text = note("- 10:00 - [[a|A]]");
+      expect(add(text, link("a", "10:00"))).toBe(text);
+    });
+
+    it("leaves a line the user edited that links to another file of the meeting, and adds no second line", () => {
+      for (const edited of ["- 10:00 - [[Archive/a|A]] (filed under the project)", "- see [[Archive/a]]"]) {
+        const text = note(edited);
+        expect(add(text, link("a", "10:00"))).toBe(text);
+      }
+    });
+
+    it("changes nothing when another line already links to the file being linked", () => {
+      const text = note("- [[Circleback/a]] my notes", "- 10:00 - [[Archive/a|A]]");
+      expect(add(text, link("a", "10:00"))).toBe(text);
+    });
+
+    it("still repoints its own line when a line the user edited also links to the moved copy", () => {
+      const text = note("- [[Archive/a]] my notes", "- 10:00 - [[Archive/a|A]]");
+      expect(add(text, link("a", "10:00"))).toBe(note("- [[Archive/a]] my notes", own("a", "10:00")));
+    });
+
+    it("repoints only the first of several own lines for the meeting", () => {
+      const text = note("- 10:00 - [[Archive/a|A]]", "- 10:00 - [[Other/a|A]]");
+      expect(add(text, link("a", "10:00"))).toBe(note(own("a", "10:00"), "- 10:00 - [[Other/a|A]]"));
+    });
+
+    it("does not touch another meeting's own line", () => {
+      const text = note(own("b", "10:00"));
+      expect(add(text, link("a", "10:00"))).toBe(note(own("b", "10:00"), own("a", "10:00")));
+    });
   });
 
   it("does not count a link outside the section as present", () => {

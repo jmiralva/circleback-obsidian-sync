@@ -12,7 +12,7 @@
 // from the old settings and undo it.
 import type { CirclebackSyncSettings } from "../settings/types";
 import { logger } from "../util/logger";
-import { OUTPUT_SETTINGS, changedOutputSettings, changedPlacementSettings } from "./outputSettings";
+import { OUTPUT_SETTINGS, changedOutputSettings, changedPlacementSettings, syncFolderDropped } from "./outputSettings";
 
 /** An edit: the settings it is given, changed. It must return new settings, not change the ones it got. */
 export type Edit = (settings: CirclebackSyncSettings) => CirclebackSyncSettings;
@@ -20,11 +20,16 @@ export type Edit = (settings: CirclebackSyncSettings) => CirclebackSyncSettings;
 /**
  * What changed between opening and closing the tab, by the kind of setting: `output` settings
  * shape the text of existing notes (a full sync updates it), `placement` settings only decide
- * where new notes go. Never both empty.
+ * where new notes go. At least one of the three says something changed.
  */
 export interface SettingsChange {
   output: string[];
   placement: string[];
+  /**
+   * Whether a folder that was a sync folder when the tab opened is outside the sync folders now,
+   * so the notes there are no longer updated (see `syncFolderDropped`).
+   */
+  syncFolderDropped: boolean;
 }
 
 /** What the saver needs from a debounced function. Obsidian's `Debouncer` has both. */
@@ -46,8 +51,16 @@ export interface SettingsSaverDeps {
 }
 
 export class SettingsSaver {
-  /** The settings as they were when the tab opened; null while it is closed. */
+  /**
+   * The settings as they were when the tab opened, with the output settings moved on by `rebase`;
+   * null while it is closed.
+   */
   private opened: CirclebackSyncSettings | null = null;
+  /**
+   * The settings as they were when the tab opened, which `rebase` leaves alone, to tell whether a
+   * sync folder dropped out: a full sync does not bring back the notes in a folder that did.
+   */
+  private atOpen: CirclebackSyncSettings | null = null;
   private sessionNumber = 0;
   /** Edits waiting for the debounce. */
   private queued: Edit[] = [];
@@ -76,26 +89,31 @@ export class SettingsSaver {
   open(): void {
     if (this.opened !== null) return;
     this.opened = { ...this.deps.store.current };
+    this.atOpen = this.opened;
     this.sessionNumber += 1;
   }
 
   /**
    * The tab closed. Saves what is waiting, then, once every save is done, tells `onSettingsChanged`
-   * which output and placement settings differ from when the tab opened. Resolves when that is finished.
+   * which output and placement settings differ from when the tab opened, and whether a sync folder
+   * dropped out. Resolves when that is finished.
    */
   close(): Promise<void> {
     const before = this.opened;
+    const atOpen = this.atOpen;
     this.opened = null;
+    this.atOpen = null;
     if (before !== null) this.sessionNumber += 1;
     this.saveQueued.run();
     return this.saving.then(() => {
-      if (before === null) return;
+      if (before === null || atOpen === null) return;
       const { current } = this.deps.store;
       const change: SettingsChange = {
         output: changedOutputSettings(before, current),
         placement: changedPlacementSettings(before, current),
+        syncFolderDropped: syncFolderDropped(atOpen, current),
       };
-      if (change.output.length === 0 && change.placement.length === 0) return;
+      if (change.output.length === 0 && change.placement.length === 0 && !change.syncFolderDropped) return;
       try {
         this.deps.onSettingsChanged(change);
       } catch (error) {
@@ -108,7 +126,9 @@ export class SettingsSaver {
    * Counts the changes so far to the output settings as dealt with: a full sync is about to
    * rewrite the notes, so closing the tab should not offer one again for them. Changes to the
    * placement settings stay counted, since a full sync never moves or renames a note and the
-   * user still needs to hear that. Does nothing while the tab is closed.
+   * user still needs to hear that. So does a sync folder that dropped out, even through an output
+   * setting: the notes there are no longer updated, full sync or not. Does nothing while the tab
+   * is closed.
    */
   async rebase(): Promise<void> {
     await this.flush();

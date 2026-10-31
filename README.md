@@ -7,8 +7,8 @@ Circleback Sync is an Obsidian plugin that copies your [Circleback](https://circ
 Each Circleback meeting becomes a Markdown note in your vault. The note holds Circleback's meeting notes, the meeting's action items and insights, and a link back to the meeting in Circleback. If you want, each meeting also gets a transcript with real speaker names. The plugin runs in the background on a schedule, or whenever you ask it to. Circleback Sync is unofficial and not affiliated with Circleback.
 
 - It works with one Circleback account or several. Each account has its own API key, and all of them sync into the same vault.
-- It writes one note per meeting. It finds a meeting's note by the meeting's id, so a note you moved or renamed is updated where it is, never copied.
-- It leaves your own frontmatter fields alone, and it never moves a note you filed elsewhere.
+- It writes one note per meeting into its sync folder, the folder you choose for notes. It finds a meeting's note there by the meeting's id, so a note you rename, or move to another folder inside the sync folder, is updated where it is, never copied.
+- It leaves your own frontmatter fields alone, and it never moves a note. Moving a note out of the sync folder makes it yours: the plugin stops updating it, and puts a fresh note in the sync folder at the next sync that covers that meeting.
 - It can add a link to each meeting in your daily notes, or put whole meeting sections inside them.
 
 ## Requirements and disclosures
@@ -118,7 +118,11 @@ The status bar shows one entry for each account, for example `Circleback: Work 1
 
 ### Notes and transcripts
 
-Each meeting becomes a note file. With "Sync transcripts" on, it also gets a transcript, either as a separate file or inside the note (see "Transcript handling"). Where files go, and what they are called, is set under Notes and Transcripts in the settings. Changing the folder, subfolder or filename settings affects new notes only: a full sync updates the text of existing notes, but it never moves or renames them.
+Each meeting becomes a note file. With "Sync transcripts" on, it also gets a transcript, either as a separate file or inside the note (see "Transcript handling"). Where files go, and what they are called, is set under Notes and Transcripts in the settings.
+
+**The sync folder.** The base folder for notes, with every folder inside it, is the plugin's sync folder. When transcripts are saved in a custom folder, the transcript base folder is one too, and with "Sections in daily notes" so is your daily notes folder. Only the files in the sync folders count as a meeting's note and transcript. The plugin keeps them up to date, so the sync folder holds the full record of your synced meetings. If the base folder is the vault root, the whole vault is the sync folder.
+
+Changing the subfolder or filename settings affects new notes only. Existing notes keep their folders and names and are still updated, since they are still in the sync folder. Changing a base folder moves the sync folder: meetings get new notes in the new folder as they sync, and the notes in the old folder stay where they are and are no longer updated. A full sync updates the text of existing notes, but it never moves or renames them.
 
 **The body of a note belongs to the plugin.** Whenever the plugin rewrites a note, it replaces everything below the frontmatter, so any edit you made to the body is lost. Circleback updates each meeting once more the morning after it happens, so a meeting's note is rewritten then too. Put your own notes in frontmatter fields with names of your choosing, or in a separate note that links to the meeting note.
 
@@ -183,7 +187,8 @@ Happy to. Let's start with the roadmap.
 
 ### Files you move, rename or delete
 
-- **A note you moved stays where you put it.** The plugin never moves a note to another folder.
+- **A note you rename or move inside the sync folder stays where you put it,** and is still updated there. The plugin never moves a note to another folder.
+- **A note you move out of the sync folder is yours.** The plugin no longer updates, renames, reports or trashes it. At the next sync that covers that meeting, it puts a fresh note in the sync folder: a normal sync, if the meeting is inside the sync history window, or a full sync. The meeting's transcript links to the fresh note, and so does the plugin's line for the meeting in the daily note, unless you edited that line. The same goes for a transcript you move out of its folder: the meeting gets a fresh transcript.
 - **Renames.** If a meeting's title or date changes in Circleback, the plugin renames the note, inside its folder, but only if the note is still where and what the plugin named it. A note you renamed keeps your name.
 - **Names.** Characters that file systems or wikilinks do not allow (`/ \ : * ? " < > | # ^ [ ]`) become `_`, and a title is cut to 200 characters. If another meeting already has the name, the plugin adds the meeting's date and time before `.md`.
 - **A note you delete comes back** at the next sync, if its meeting is still inside the sync history window. A full sync brings back every note.
@@ -205,6 +210,7 @@ With "Link from daily notes" on and "Save as" set to "Individual files", the plu
 - New lines go in time order among the plugin's own lines. With none after them, a line goes at the end of the section.
 - The plugin recognizes its own lines by their exact format and by their link pointing to a note with a `circleback_id`, so a line still counts after you rename or move the note.
 - Lines you typed or edited are left alone. A meeting already linked anywhere in the section, in any form, is not added again.
+- Each meeting has one line, linking to its note in the sync folder. If the plugin's line for a meeting, still as the plugin wrote it, links to a copy you moved out of the sync folder, the plugin changes that line, where it is, to link to the note in the sync folder. A line you edited, including one whose link text you changed, stays as it is, and the plugin adds no second line for that meeting.
 - The plugin removes a line only when its meeting moved to a different day and the line is still as the plugin wrote it.
 - The daily note is changed only when something in it needs to change.
 
@@ -218,7 +224,7 @@ With "Save as" set to "Sections in daily notes", each meeting's notes go into th
 
 ## Duplicates
 
-Before the plugin creates a file, it looks for an existing file with the same meeting id and the same kind (`note` or `transcript`) anywhere in the vault. That is why a moved or renamed note is updated and not copied, and why editing `type` does not cause a copy.
+Before the plugin creates a file, it looks for an existing file with the same meeting id and the same kind (`note` or `transcript`) in its sync folders (see [The sync folder](#notes-and-transcripts)). That is why a note you rename, or move inside the sync folder, is updated and not copied, and why editing `type` does not cause a copy. A file outside the sync folders does not count: it is never reported as a duplicate and never trashed, and its meeting gets a fresh file in the sync folder.
 
 A meeting can still end up with two files. Two devices syncing the same vault at the same moment, before each one has the other's new files, can each create one. So can copying a note by hand.
 
@@ -236,6 +242,7 @@ When you change a setting, what happens to existing notes depends on its kind:
 
 - **Content settings** change what goes into notes: Sync notes, Sync transcripts, Include private notes, Include action items, Include insights, Save as, Link from daily notes, Transcript handling and Self label. A change applies to meetings synced from now on. When you close the settings, a notice offers to run a full sync, which updates the text of existing notes.
 - **Placement settings** decide where new notes and transcripts go: Base folder, Custom base folder, Subfolders, Custom subfolder pattern and Filename pattern for notes, and Transcript base folder, Transcript subfolders, Custom transcript subfolder pattern and Transcript filename pattern for transcripts. A change affects new files only. A full sync never moves or renames an existing note, so existing notes keep their folders and file names. If you changed only placement settings, the notice says so and has no button. If you changed both kinds, the full sync notice adds that existing notes keep their folders and file names.
+- **Changing a base folder moves the sync folder** (see [The sync folder](#notes-and-transcripts)). This happens when you change Base folder, Custom base folder or Transcript base folder, and also when "Save as" or "Transcript handling" changes which folders the plugin syncs. Meetings get new notes in the new folder as they sync, and the notes in the old folder stay where they are and are no longer updated. The notice says so. If you also changed a content setting, the full sync notice says it too. Nothing is left behind when the old folder is still inside a sync folder, for example when the new base folder is a folder above the old one, or when the old transcript base folder is inside the base folder, as it is by default. Then the notice only says that new notes use the new folders.
 
 ### Accounts
 
@@ -278,8 +285,8 @@ Add an account with "Add account". New accounts are labeled "Account 1", "Accoun
 | Include action items | On | Adds the meeting's action items. |
 | Include insights | On | Adds the meeting's insights. |
 | Save as | Individual files | "Individual files", or "Sections in daily notes". |
-| Base folder | Custom folder | "Custom folder", or "Daily notes folder". Only for individual files. |
-| Custom base folder | `Circleback` | The vault folder for notes. |
+| Base folder | Custom folder | "Custom folder", or "Daily notes folder". Only for individual files. After a change, notes in the old folder are no longer updated. |
+| Custom base folder | `Circleback` | The vault folder for notes. After a change, notes in the old folder are no longer updated. |
 | Subfolders | None | Sorts notes into folders inside the base folder: "None", "By day" (`2026-10-27`), "By month" (`2026-10`), "Year, then month" (`2026/10`), "Year, then quarter" (`2026/Q4`) or "Custom pattern". |
 | Custom subfolder pattern | Empty | The folders to use for "Custom pattern". A `/` makes a folder inside a folder. See [Pattern variables](#pattern-variables). |
 | Filename pattern | `{title}` | What each note file is called, without `.md`. See [Pattern variables](#pattern-variables). |
@@ -295,7 +302,7 @@ These settings appear when "Sync transcripts" is on.
 | Setting | Default | What it does |
 | --- | --- | --- |
 | Transcript handling | Separate files in a custom folder | "Separate files in a custom folder", "Separate files next to the note", or "In the note itself". "In the note itself" needs individual files and "Sync notes" on. Otherwise the transcript gets a file next to the note. |
-| Transcript base folder | `Circleback/Transcripts` | The vault folder for transcripts. Only for a custom folder. |
+| Transcript base folder | `Circleback/Transcripts` | The vault folder for transcripts. Only for a custom folder. After a change, transcripts in the old folder are no longer updated. |
 | Transcript subfolders | None | Same choices as "Subfolders", inside the transcript base folder. |
 | Custom transcript subfolder pattern | Empty | The folders to use for "Custom pattern". See [Pattern variables](#pattern-variables). |
 | Transcript filename pattern | `{title}-transcript` | What each transcript file is called, without `.md`. Not used for "In the note itself". See [Pattern variables](#pattern-variables). |
@@ -374,7 +381,7 @@ One account failing never stops the others.
 
 ### A setting did not change my old notes
 
-Settings that change what goes into notes apply to meetings synced from now on. Run "Full sync" to update the text of the older ones. A full sync replaces the text of every synced note. Fields the plugin does not own are kept. Changing the folder, subfolder or filename settings affects new notes only: a full sync never moves or renames an existing note.
+Settings that change what goes into notes apply to meetings synced from now on. Run "Full sync" to update the text of the older ones. A full sync replaces the text of every synced note. Fields the plugin does not own are kept. Changing the subfolder or filename settings affects new notes only: a full sync never moves or renames an existing note. After a base folder change, the notes in the old folder are no longer updated: meetings get new notes in the new folder as they sync, and a full sync gives every meeting one.
 
 ## Credits and license
 

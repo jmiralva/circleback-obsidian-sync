@@ -5,6 +5,7 @@ import {
   PLACEMENT_SETTINGS,
   changedOutputSettings,
   changedPlacementSettings,
+  syncFolderDropped,
 } from "../../src/ui/outputSettings";
 
 // A different value of the same kind, whatever the setting is.
@@ -213,5 +214,73 @@ describe("changedPlacementSettings", () => {
     expect(changedPlacementSettings(DEFAULT_SETTINGS, { ...DEFAULT_SETTINGS })).toEqual([]);
     expect(changedPlacementSettings(DEFAULT_SETTINGS, edited)).toEqual(["filenamePattern"]);
     expect(changedPlacementSettings(DEFAULT_SETTINGS, reverted)).toEqual([]);
+  });
+});
+
+describe("syncFolderDropped", () => {
+  function dropped(prev: Partial<CirclebackSyncSettings>, next: Partial<CirclebackSyncSettings>): boolean {
+    return syncFolderDropped({ ...DEFAULT_SETTINGS, ...prev }, { ...DEFAULT_SETTINGS, ...next });
+  }
+
+  it("is false when nothing that decides the sync folders changed", () => {
+    expect(dropped({}, {})).toBe(false);
+    expect(dropped({}, { includeInsights: false, syncIntervalMinutes: 60 })).toBe(false);
+  });
+
+  it("is true when the base folder changes to another folder", () => {
+    expect(dropped({}, { customBaseFolder: "Meetings" })).toBe(true);
+    expect(dropped({}, { customBaseFolder: "Circleback/Notes" })).toBe(true);
+  });
+
+  it("is true when notes switch between a custom folder and the daily notes folder, either way", () => {
+    expect(dropped({}, { baseFolderType: "daily-notes" })).toBe(true);
+    expect(dropped({ baseFolderType: "daily-notes" }, {})).toBe(true);
+  });
+
+  it("is false when the new base folder holds the old one, as the vault root holds everything", () => {
+    expect(dropped({ customBaseFolder: "Circleback/Notes" }, { customBaseFolder: "Circleback" })).toBe(false);
+    expect(dropped({}, { customBaseFolder: "" })).toBe(false);
+  });
+
+  it("is true when the base folder was the vault root and is now a folder", () => {
+    expect(dropped({ customBaseFolder: "" }, {})).toBe(true);
+  });
+
+  it("is false for the same folder spelled another way", () => {
+    expect(dropped({}, { customBaseFolder: "/Circleback/" })).toBe(false);
+  });
+
+  it("is false when only subfolder or file name patterns changed", () => {
+    const patterns: Partial<CirclebackSyncSettings> = {
+      subfolderPattern: "custom",
+      customSubfolderPattern: "{year}",
+      filenamePattern: "{date} {title}",
+      transcriptSubfolderPattern: "month",
+      customTranscriptSubfolderPattern: "{month}",
+      transcriptFilenamePattern: "{title} transcript",
+    };
+    expect(dropped({}, patterns)).toBe(false);
+  });
+
+  it("looks at the transcript base folder, but only when it is outside the base folder", () => {
+    // The default transcript folder is inside the base folder, so its transcripts still count.
+    expect(dropped({}, { customTranscriptBaseFolder: "Circleback/Calls" })).toBe(false);
+    expect(dropped({ customTranscriptBaseFolder: "Transcripts" }, { customTranscriptBaseFolder: "Calls" })).toBe(true);
+    // A transcript folder that is not in use does not count.
+    expect(dropped({ transcriptHandling: "combined", customTranscriptBaseFolder: "Transcripts" }, {
+      transcriptHandling: "combined",
+      customTranscriptBaseFolder: "Calls",
+    })).toBe(false);
+  });
+
+  it("is true when transcripts stop having a folder of their own outside the base folder", () => {
+    expect(dropped({ customTranscriptBaseFolder: "Transcripts" }, { customTranscriptBaseFolder: "Transcripts", transcriptHandling: "same-location" })).toBe(true);
+    expect(dropped({}, { transcriptHandling: "same-location" })).toBe(false);
+  });
+
+  it("counts the daily notes folder in sections mode, whatever folder that really is", () => {
+    expect(dropped({ saveAs: "sections" }, {})).toBe(true);
+    expect(dropped({}, { saveAs: "sections" })).toBe(false);
+    expect(dropped({ baseFolderType: "daily-notes" }, { baseFolderType: "daily-notes", saveAs: "sections" })).toBe(false);
   });
 });

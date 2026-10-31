@@ -2,7 +2,9 @@
 //
 // This is the code that touches the user's notes, so it keeps three promises:
 // - One note and one transcript per meeting. Files are found by (circleback_id, circleback_kind)
-//   through the index, wherever they were moved or renamed. A `note` and a `combined` file are
+//   through the index, wherever they were moved or renamed inside the sync folders. A file moved
+//   out of them no longer counts (the index does not hold it), so the meeting gets a fresh file at
+//   its computed path, and the moved one is never touched. A `note` and a `combined` file are
 //   one identity, the meeting's note: switching transcript handling turns the existing file into
 //   the other kind in place. A file of this meeting that the index has not seen yet (synced in
 //   from another device mid-run) is taken over, never copied.

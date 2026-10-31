@@ -378,6 +378,23 @@ describe("DailyNotes.linkMeeting", () => {
     expect(fake.fileText(DAY_26)).toBe(`# Day\n\n## Meetings\n${other}\n- 10:00 - ${LINK}\n`);
   });
 
+  it("points its own line at the note being linked when the line links to a copy moved out of the sync folder", async () => {
+    const moved = "- 10:00 - [[Archive/Meeting 1|Meeting 1]]";
+    const fake = app({
+      "Archive/Meeting 1.md": pluginFile({ id: ONE.id }),
+      [DAY_26]: `# Day\n\n## Meetings\n- 09:00 - standup\n${moved}\n- 11:00 - lunch\n`,
+    });
+    await new DailyNotes(fake).linkMeeting(file(fake, NOTE_PATH), meeting(), null, settings(), NOW);
+    expect(fake.fileText(DAY_26)).toBe(`# Day\n\n## Meetings\n- 09:00 - standup\n- 10:00 - ${LINK}\n- 11:00 - lunch\n`);
+  });
+
+  it("leaves an edited line that links to a copy moved out of the sync folder, and adds no second line", async () => {
+    const text = "# Day\n\n## Meetings\n- 10:00 - [[Archive/Meeting 1|Meeting 1]] (filed)\n";
+    const fake = app({ "Archive/Meeting 1.md": pluginFile({ id: ONE.id }), [DAY_26]: text });
+    await new DailyNotes(fake).linkMeeting(file(fake, NOTE_PATH), meeting(), null, settings(), NOW);
+    expect(fake.fileText(DAY_26)).toBe(text);
+  });
+
   it("writes an alias that cannot break the link", async () => {
     const fake = app();
     await new DailyNotes(fake).linkMeeting(file(fake, NOTE_PATH), meeting({ name: "Q3 [draft] | review\nfinal" }), null, settings(), NOW);

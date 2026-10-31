@@ -27,16 +27,31 @@ async function built(app: FakeApp, folders: string[] = ["Circleback"]): Promise<
 }
 
 describe("MeetingIndex", () => {
-  it("finds a note moved to another folder by id and kind", async () => {
+  it("finds a note moved and renamed inside the configured folders by id and kind", async () => {
+    const app = createFakeApp({
+      files: { "Circleback/Standup.md": pluginFile({ id: "m1" }) },
+    });
+    const note = file(app, "Circleback/Standup.md");
+    await app.vault.createFolder("Circleback/2026/Projects");
+    await app.fileManager.renameFile(note, "Circleback/2026/Projects/Weekly sync.md");
+
+    const index = await built(app);
+    expect(paths(index.find("m1", "note"))).toEqual(["Circleback/2026/Projects/Weekly sync.md"]);
+  });
+
+  it("no longer finds a note moved out of the configured folders", async () => {
     const app = createFakeApp({
       files: { "Circleback/Standup.md": pluginFile({ id: "m1" }) },
     });
     const note = file(app, "Circleback/Standup.md");
     await app.vault.createFolder("Projects/Elsewhere");
     await app.fileManager.renameFile(note, "Projects/Elsewhere/Weekly sync.md");
+    expect(app.metadataCache.getFileCache(note)?.frontmatter).toMatchObject({ circleback_id: "m1" });
 
     const index = await built(app);
-    expect(paths(index.find("m1", "note"))).toEqual(["Projects/Elsewhere/Weekly sync.md"]);
+    expect(index.find("m1", "note")).toEqual([]);
+    expect(index.frontmatter(note)).toBeNull();
+    expect(index.keys()).toEqual([]);
   });
 
   it("does not confuse a note and its transcript", async () => {
@@ -156,10 +171,18 @@ describe("MeetingIndex", () => {
       expect(index.find("m1", "note")).toEqual([]);
     });
 
-    it("finds an indexed file anywhere in the vault, not only in the configured folders", async () => {
-      const app = createFakeApp({ files: { "Archive/2025/old.md": pluginFile({ id: "m1" }) } });
+    it("skips a file outside the configured folders even when the metadata cache knows its frontmatter", async () => {
+      const app = createFakeApp({
+        files: {
+          "Archive/2025/old.md": pluginFile({ id: "m1" }),
+          "Circleback Archive/old.md": pluginFile({ id: "m1" }),
+          "old.md": pluginFile({ id: "m1" }),
+          "Circleback/kept.md": pluginFile({ id: "m1" }),
+        },
+      });
       const index = await built(app, ["Circleback"]);
-      expect(paths(index.find("m1", "note"))).toEqual(["Archive/2025/old.md"]);
+      expect(paths(index.find("m1", "note"))).toEqual(["Circleback/kept.md"]);
+      expect(index.frontmatter(file(app, "Archive/2025/old.md"))).toBeNull();
     });
 
     it("skips unindexed files outside the configured folders", async () => {
@@ -187,12 +210,17 @@ describe("MeetingIndex", () => {
     it("treats an empty folder, or a slash, as the whole vault", async () => {
       for (const root of ["", "/"]) {
         const app = createFakeApp({
-          files: { "Anywhere/at/all.md": pluginFile({ id: "m1" }), "top.md": pluginFile({ id: "m2" }) },
+          files: {
+            "Anywhere/at/all.md": pluginFile({ id: "m1" }),
+            "top.md": pluginFile({ id: "m2" }),
+            "Cached/far/away.md": pluginFile({ id: "m3" }),
+          },
           unindexed: ["Anywhere/at/all.md", "top.md"],
         });
         const index = await built(app, [root]);
         expect(paths(index.find("m1", "note"))).toEqual(["Anywhere/at/all.md"]);
         expect(paths(index.find("m2", "note"))).toEqual(["top.md"]);
+        expect(paths(index.find("m3", "note"))).toEqual(["Cached/far/away.md"]);
       }
     });
 
@@ -325,6 +353,18 @@ describe("MeetingIndex", () => {
         circleback_first_synced: "2026-10-25T00:00:00.000Z",
       });
       expect(paths(index.find("m1", "note"))).toEqual(["Circleback/b.md", "Circleback/a.md"]);
+    });
+
+    it("upsert leaves out a file outside the configured folders", async () => {
+      const app = createFakeApp({ files: { "Archive/a.md": pluginFile({ id: "m1" }), "Circleback/b.md": "" } });
+      const index = await built(app, ["Circleback"]);
+      const fm = { circleback_id: "m1", circleback_kind: "note" };
+
+      index.upsert(file(app, "Archive/a.md"), fm);
+      index.upsert(file(app, "Circleback/b.md"), fm);
+
+      expect(paths(index.find("m1", "note"))).toEqual(["Circleback/b.md"]);
+      expect(index.frontmatter(file(app, "Archive/a.md"))).toBeNull();
     });
 
     it("upsert drops a file whose frontmatter is not a plugin file's", async () => {

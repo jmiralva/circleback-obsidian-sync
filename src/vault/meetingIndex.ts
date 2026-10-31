@@ -1,5 +1,10 @@
-// Which vault files hold which meeting, so a file that was moved or renamed is updated where
-// it is and never written a second time.
+// Which files in the sync folders hold which meeting, so a file that was moved or renamed inside
+// them is updated where it is and never written a second time.
+//
+// Only files inside the sync folders (see `settings/syncFolders`) are indexed. A file moved out
+// of them is not, even though the metadata cache still knows its frontmatter: it is the user's
+// now, so the plugin never writes, renames, reports or trashes it, and the meeting gets a fresh
+// file in the sync folders.
 //
 // A file is indexed when its frontmatter has a string `circleback_id` and a `circleback_kind`
 // that is one of the three kinds. The index is keyed by (id, kind): a meeting's note and its
@@ -7,12 +12,12 @@
 // their paths, so a rename does not lose a file.
 //
 // Obsidian's metadata cache lags behind writes, and is empty at startup. Two things cover for it:
-// `build` reads and parses any file in the configured folders that the cache has no entry for,
-// and `upsert` / `forget` let the code that writes or trashes a file during a run tell the index
-// at once.
+// `build` reads and parses any file in the sync folders that the cache has no entry for, and
+// `upsert` / `forget` let the code that writes or trashes a file during a run tell the index at once.
 import { normalizePath } from "obsidian";
 import type { App, TFile } from "obsidian";
 import { isFileKind, type FileKind } from "../format/fields";
+import { isInFolders } from "../settings/syncFolders";
 import { logger } from "../util/logger";
 import { readFrontmatter } from "./frontmatter";
 
@@ -52,19 +57,13 @@ function firstSynced(frontmatter: Record<string, unknown>): string | null {
   return typeof value === "string" && value !== "" ? value : null;
 }
 
-/** The normalized folders; the vault root, whatever it was spelled as, is "/". */
-function insideFolders(path: string, folders: readonly string[]): boolean {
-  return folders.some((folder) => folder === "/" || path.startsWith(`${folder}/`));
-}
-
 export class MeetingIndex {
   private readonly entries = new Map<TFile, Entry>();
   private readonly groups = new Map<string, Group>();
 
   /**
-   * @param folders The folders the plugin writes into, read on every `build`. "" (or "/") is the
-   * whole vault. Files outside them are indexed too if the metadata cache knows their
-   * frontmatter, so a note moved out of these folders is still found.
+   * @param folders The sync folders, read on every `build` and `upsert`. "" (or "/") is the whole
+   * vault. A file outside them is never indexed, even when the metadata cache knows its frontmatter.
    */
   constructor(
     private readonly app: App,
@@ -72,29 +71,27 @@ export class MeetingIndex {
   ) {}
 
   /**
-   * Scans every Markdown file and replaces what the index held. A file in the configured
-   * folders that the metadata cache has no entry for is read and parsed directly (the cache
-   * may simply not have reached it yet), and one outside them is skipped. A file that cannot be
-   * read is skipped and logged.
+   * Scans every Markdown file in the sync folders and replaces what the index held. A file that
+   * the metadata cache has no entry for is read and parsed directly (the cache may simply not
+   * have reached it yet). A file that cannot be read is skipped and logged.
    */
   async build(): Promise<void> {
-    const folders = this.folders().map((folder) => normalizePath(folder));
+    const folders = this.syncFolders();
     const found: Array<[TFile, Record<string, unknown>]> = [];
 
     for (const file of this.app.vault.getMarkdownFiles()) {
+      if (!isInFolders(file.path, folders)) continue;
       const cache = this.app.metadataCache.getFileCache(file);
       let frontmatter: Record<string, unknown> | null;
       if (cache) {
         frontmatter = cache.frontmatter ?? null;
-      } else if (insideFolders(file.path, folders)) {
+      } else {
         try {
           frontmatter = await readFrontmatter(this.app, file);
         } catch (error) {
           logger.warn(`Could not read ${file.path} to look for a Circleback meeting; skipping it.`, error);
           continue;
         }
-      } else {
-        continue;
       }
       if (frontmatter !== null) found.push([file, frontmatter]);
     }
@@ -145,11 +142,12 @@ export class MeetingIndex {
   /**
    * Records a file's frontmatter, replacing what the index knew about it. Call it after writing
    * a file during a run, so the file is found before the metadata cache has caught up. Frontmatter
-   * that is not a plugin file's (or null) removes the file from the index.
+   * that is not a plugin file's (or null), or a file outside the sync folders, removes the file
+   * from the index.
    */
   upsert(file: TFile, frontmatter: Record<string, unknown> | null): void {
     this.forget(file);
-    if (frontmatter === null) return;
+    if (frontmatter === null || !isInFolders(file.path, this.syncFolders())) return;
     const key = meetingKeyOf(frontmatter);
     if (key === null) return;
 
@@ -171,5 +169,10 @@ export class MeetingIndex {
     this.entries.delete(file);
     entry.group.files.delete(file);
     if (entry.group.files.size === 0) this.groups.delete(groupKey(entry.group.id, entry.group.kind));
+  }
+
+  /** The sync folders, normalized: the vault root, whatever it was spelled as, is "/". */
+  private syncFolders(): string[] {
+    return this.folders().map((folder) => normalizePath(folder));
   }
 }

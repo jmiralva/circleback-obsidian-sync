@@ -3,6 +3,7 @@
 // it says what stopped, why, and what to do.
 import type { AccountDeviceState } from "../state/deviceState";
 import type { AccountErrorKind, RunResult } from "../sync/syncEngine";
+import type { SettingsChange } from "./settingsSaver";
 
 // Notices that say the same thing every time.
 
@@ -32,10 +33,32 @@ export const OUTPUT_AND_PLACEMENT_CHANGE_NOTICE = OUTPUT_CHANGE_NOTICE + PLACEME
 /** Shown, with no button, when only folder or file name settings were changed: there is nothing for a full sync to do. */
 export const PLACEMENT_CHANGE_NOTICE =
   "Circleback Sync: new notes will use the new folders and file names. Existing notes stay where they are.";
+/** Added to the full sync notice when a folder dropped out of the sync folders: its notes no longer count. */
+export const FOLDER_NOTICE_SUFFIX = " Notes in the old folder stay where they are and are no longer updated.";
+export const OUTPUT_AND_FOLDER_CHANGE_NOTICE = OUTPUT_CHANGE_NOTICE + FOLDER_NOTICE_SUFFIX;
+/** Shown, with no button, when a folder dropped out of the sync folders and no setting that shapes the text changed. */
+export const FOLDER_CHANGE_NOTICE =
+  "Circleback Sync: meetings will get new notes in the new folder as they sync." + FOLDER_NOTICE_SUFFIX;
 export const SETTINGS_NOT_SAVED = "Circleback Sync: could not save the settings.";
 export const LOGS_COPIED = "Circleback Sync: logs copied. API keys are removed from them.";
 export const LOGS_NOT_COPIED = "Circleback Sync: could not copy the logs.";
 export const KEY_NOT_SAVED = "Circleback Sync: could not save the API key.";
+
+/**
+ * What to tell the user when the settings tab closes after `change`, and whether to offer a full
+ * sync. A full sync is offered only when a setting that shapes the text of the notes changed.
+ * When a folder dropped out of the sync folders, the notice says that the notes there are no
+ * longer updated. Otherwise a change of folders or file names only affects new notes, which keep
+ * being updated where they are.
+ */
+export function settingsChangeNotice(change: SettingsChange): { text: string; offerFullSync: boolean } {
+  if (change.output.length > 0) {
+    if (change.syncFolderDropped) return { text: OUTPUT_AND_FOLDER_CHANGE_NOTICE, offerFullSync: true };
+    if (change.placement.length > 0) return { text: OUTPUT_AND_PLACEMENT_CHANGE_NOTICE, offerFullSync: true };
+    return { text: OUTPUT_CHANGE_NOTICE, offerFullSync: true };
+  }
+  return { text: change.syncFolderDropped ? FOLDER_CHANGE_NOTICE : PLACEMENT_CHANGE_NOTICE, offerFullSync: false };
+}
 
 const REASONS: Record<AccountErrorKind, string> = {
   auth: "the API key was not accepted",

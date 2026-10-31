@@ -1088,3 +1088,230 @@ describe("SyncEngine.fullSync", () => {
     expect(device.account("a").fullSyncCursor).toBeUndefined();
   });
 });
+
+describe("files moved out of the sync folders", () => {
+  const MOVED = "Projects/Meeting m1.md";
+
+  /** Moves a file as the user would, creating the folder it goes to. */
+  async function move(app: FakeApp, from: string, to: string): Promise<void> {
+    const folder = to.slice(0, to.lastIndexOf("/"));
+    if (folder !== "" && !app.exists(folder)) await app.vault.createFolder(folder);
+    const file = app.vault.getFileByPath(from);
+    if (!file) throw new Error(`No such file: ${from}`);
+    await app.fileManager.renameFile(file, to);
+  }
+
+  /** Every call that changes the vault, with the path of the file it was given or the path it names. */
+  function watchWrites(app: FakeApp): () => string[] {
+    const spies = [
+      jest.spyOn(app.vault, "create"),
+      jest.spyOn(app.vault, "modify"),
+      jest.spyOn(app.vault, "process"),
+      jest.spyOn(app.fileManager, "processFrontMatter"),
+      jest.spyOn(app.fileManager, "renameFile"),
+      jest.spyOn(app.fileManager, "trashFile"),
+    ] as jest.SpyInstance[];
+    return () =>
+      spies.flatMap((spy) =>
+        spy.mock.calls.map((call: unknown[]) => {
+          const [target] = call;
+          return typeof target === "string" ? target : (target as TFile).path;
+        }),
+      );
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it("gives the meeting a fresh note in the sync folder at the next sync, and leaves the moved copy as it was", async () => {
+    const { app, engine, server } = setup({
+      servers: { a: { email: A_EMAIL, pages: [[meeting("m1")]] } },
+      settings: { syncTranscripts: true },
+    });
+    await sync(engine);
+    await move(app, notePath("m1"), MOVED);
+    // Obsidian updates the transcript's link to follow the move.
+    const transcript = app.vault.getFileByPath(transcriptPath("m1"));
+    if (!transcript) throw new Error("no transcript");
+    await app.fileManager.processFrontMatter(transcript, (fm: Record<string, unknown>) => {
+      fm.note = `[[${MOVED}]]`;
+    });
+    const movedText = app.fileText(MOVED);
+    const written = watchWrites(app);
+
+    const result = await sync(engine);
+
+    expect(result.perAccount.a).toMatchObject({ ok: true, written: 1, failed: 0 });
+    expect(frontmatter(app, notePath("m1"))).toMatchObject({ circleback_id: "m1", circleback_kind: "note" });
+    expect(frontmatter(app, notePath("m1")).transcript).toBe(`[[${transcriptPath("m1")}]]`);
+    // The transcript stayed in the sync folder, so it is updated to link to the fresh note.
+    expect(frontmatter(app, transcriptPath("m1")).note).toBe(`[[${notePath("m1")}]]`);
+    expect(app.fileText(MOVED)).toBe(movedText);
+    expect(written()).not.toContain(MOVED);
+    expect(result.duplicates).toEqual([]);
+
+    // Later syncs, even after the meeting changes, keep to the fresh note.
+    server("a").script.pages = [[meeting("m1", { updatedAt: LATER, name: "Renamed upstream" })]];
+    await sync(engine);
+    expect(app.fileText(MOVED)).toBe(movedText);
+    expect(written()).not.toContain(MOVED);
+    expect(filesOf(app, "m1").map((file) => file.path).sort()).toEqual(
+      ["Circleback/Renamed upstream.md", "Circleback/Transcripts/Renamed upstream-transcript.md", MOVED].sort(),
+    );
+  });
+
+  it("never reports the moved copy as a duplicate, and clean-up never trashes it", async () => {
+    const { app, engine } = setup({
+      servers: { a: { email: A_EMAIL, pages: [[meeting("m1")]] } },
+      settings: { cleanUpDuplicates: true },
+    });
+    await sync(engine);
+    // An untouched copy: clean-up would trash it if it counted as a duplicate.
+    await move(app, notePath("m1"), MOVED);
+    const movedText = app.fileText(MOVED);
+    const trash = jest.spyOn(app.fileManager, "trashFile");
+
+    const first = await sync(engine);
+    const second = await sync(engine);
+
+    expect(first.duplicates).toEqual([]);
+    expect(second.duplicates).toEqual([]);
+    expect(second.perAccount.a).toMatchObject({ written: 0, skipped: 1 });
+    expect(trash).not.toHaveBeenCalled();
+    expect(app.fileText(MOVED)).toBe(movedText);
+    expect(app.exists(notePath("m1"))).toBe(true);
+  });
+
+  it("writes the fresh note for a meeting outside the sync window only at a full sync", async () => {
+    const old = meeting("old", { createdAt: "2025-01-06T15:00:00.000Z", updatedAt: "2025-01-06T16:00:00.000Z" });
+    const { app, engine } = setup({ servers: { a: { email: A_EMAIL, pages: [[meeting("m1")], [old]] } } });
+    await fullSync(engine);
+    await move(app, notePath("old"), "Archive/Meeting old.md");
+    const movedText = app.fileText("Archive/Meeting old.md");
+
+    await sync(engine);
+    expect(app.exists(notePath("old"))).toBe(false);
+
+    await fullSync(engine);
+    expect(frontmatter(app, notePath("old")).circleback_id).toBe("old");
+    expect(app.fileText("Archive/Meeting old.md")).toBe(movedText);
+  });
+
+  it("gives a meeting whose transcript was moved out a fresh transcript, linked from the note", async () => {
+    const MOVED_TRANSCRIPT = "Archive/Meeting m1-transcript.md";
+    const { app, engine } = setup({
+      servers: { a: { email: A_EMAIL, pages: [[meeting("m1")]] } },
+      settings: { syncTranscripts: true },
+    });
+    await sync(engine);
+    await move(app, transcriptPath("m1"), MOVED_TRANSCRIPT);
+    const movedText = app.fileText(MOVED_TRANSCRIPT);
+    const written = watchWrites(app);
+
+    const result = await sync(engine);
+
+    expect(result.perAccount.a).toMatchObject({ written: 1 });
+    expect(frontmatter(app, transcriptPath("m1"))).toMatchObject({ circleback_id: "m1", circleback_kind: "transcript" });
+    expect(frontmatter(app, notePath("m1")).transcript).toBe(`[[${transcriptPath("m1")}]]`);
+    expect(app.fileText(MOVED_TRANSCRIPT)).toBe(movedText);
+    expect(written()).not.toContain(MOVED_TRANSCRIPT);
+    expect(result.duplicates).toEqual([]);
+  });
+
+  it("repoints the plugin's daily-note line to the fresh note, in place", async () => {
+    const { app, engine } = setup({
+      servers: { a: { email: A_EMAIL, pages: [[meeting("m1")]] } },
+      settings: { linkFromDailyNotes: true, dailyNoteLinkHeading: "## Meetings" },
+      files: { "2026-10-26.md": "## Meetings\n- 09:00 - standup\n- 11:00 - lunch\n" },
+    });
+    await sync(engine);
+    expect(app.fileText("2026-10-26.md")).toBe(
+      "## Meetings\n- 09:00 - standup\n- 11:00 - lunch\n- 10:00 - [[Circleback/Meeting m1|Meeting m1]]\n",
+    );
+    await move(app, notePath("m1"), MOVED);
+    // Obsidian updates the link to follow the move.
+    const daily = app.vault.getFileByPath("2026-10-26.md");
+    if (!daily) throw new Error("no daily note");
+    await app.vault.process(daily, (text) => text.replace("[[Circleback/Meeting m1|", "[[Projects/Meeting m1|"));
+
+    await sync(engine);
+
+    expect(app.exists(notePath("m1"))).toBe(true);
+    expect(app.fileText("2026-10-26.md")).toBe(
+      "## Meetings\n- 09:00 - standup\n- 11:00 - lunch\n- 10:00 - [[Circleback/Meeting m1|Meeting m1]]\n",
+    );
+  });
+
+  it("leaves a daily-note line the user edited, linking to the moved copy, and adds no second line", async () => {
+    const edited = "- 10:00 - [[Projects/Meeting m1|Meeting m1]] (filed under the project)";
+    const { app, engine } = setup({
+      servers: { a: { email: A_EMAIL, pages: [[meeting("m1")]] } },
+      settings: { linkFromDailyNotes: true, dailyNoteLinkHeading: "## Meetings" },
+    });
+    await sync(engine);
+    await move(app, notePath("m1"), MOVED);
+    const daily = app.vault.getFileByPath("2026-10-26.md");
+    if (!daily) throw new Error("no daily note");
+    await app.vault.modify(daily, `## Meetings\n${edited}\n`);
+
+    await sync(engine);
+
+    expect(app.exists(notePath("m1"))).toBe(true);
+    expect(app.fileText("2026-10-26.md")).toBe(`## Meetings\n${edited}\n`);
+  });
+
+  it("with the vault root as the base folder, counts a note moved anywhere and updates it where it is", async () => {
+    const { app, engine, server } = setup({
+      servers: { a: { email: A_EMAIL, pages: [[meeting("m1")]] } },
+      settings: { customBaseFolder: "" },
+    });
+    await sync(engine);
+    await move(app, "Meeting m1.md", MOVED);
+
+    server("a").script.pages = [[meeting("m1", { updatedAt: LATER })]];
+    const result = await sync(engine);
+
+    expect(result.perAccount.a).toMatchObject({ written: 1 });
+    expect(app.exists("Meeting m1.md")).toBe(false);
+    expect(frontmatter(app, MOVED).circleback_updated).toBe(LATER);
+    expect(result.duplicates).toEqual([]);
+  });
+
+  it("in sections mode, counts a transcript anywhere under the daily notes folder and writes a fresh one for one moved out", async () => {
+    const { app, engine, server } = setup({
+      servers: { a: { email: A_EMAIL, pages: [[meeting("m1"), meeting("m2")]] } },
+      settings: { saveAs: "sections", syncTranscripts: true, transcriptHandling: "same-location" },
+      files: { ".obsidian/daily-notes.json": JSON.stringify({ folder: "Daily" }) },
+    });
+    await sync(engine);
+    expect(app.exists("Daily/Meeting m1-transcript.md")).toBe(true);
+    await move(app, "Daily/Meeting m1-transcript.md", "Daily/Archive/Meeting m1-transcript.md");
+    await move(app, "Daily/Meeting m2-transcript.md", "Archive/Meeting m2-transcript.md");
+    const movedText = app.fileText("Archive/Meeting m2-transcript.md");
+
+    server("a").script.pages = [[meeting("m1", { updatedAt: LATER }), meeting("m2", { updatedAt: LATER })]];
+    const result = await sync(engine);
+
+    // m1 is still inside the daily notes folder: updated where it is.
+    expect(app.exists("Daily/Meeting m1-transcript.md")).toBe(false);
+    expect(frontmatter(app, "Daily/Archive/Meeting m1-transcript.md").circleback_updated).toBe(LATER);
+    // m2 was moved out: a fresh transcript, and the moved one as it was.
+    expect(frontmatter(app, "Daily/Meeting m2-transcript.md").circleback_updated).toBe(LATER);
+    expect(app.fileText("Archive/Meeting m2-transcript.md")).toBe(movedText);
+    expect(result.duplicates).toEqual([]);
+  });
+
+  it("after the base folder setting changes, writes fresh notes in the new folder and leaves the old ones", async () => {
+    const { app, engine, settings } = setup({ servers: { a: { email: A_EMAIL, pages: [[meeting("m1")]] } } });
+    await sync(engine);
+    const oldText = app.fileText(notePath("m1"));
+
+    settings.customBaseFolder = "Meetings";
+    const result = await sync(engine);
+
+    expect(frontmatter(app, "Meetings/Meeting m1.md").circleback_id).toBe("m1");
+    expect(app.fileText(notePath("m1"))).toBe(oldText);
+    expect(result.duplicates).toEqual([]);
+  });
+});

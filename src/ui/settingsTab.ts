@@ -14,15 +14,7 @@ import { logger } from "../util/logger";
 import type { Kind } from "../vault/meetingIndex";
 import { clearKey, commitKey, testKey } from "./accountKeys";
 import type { KeyChange } from "./accountKeys";
-import {
-  KEY_NOT_SAVED,
-  LOGS_COPIED,
-  LOGS_NOT_COPIED,
-  OUTPUT_AND_PLACEMENT_CHANGE_NOTICE,
-  OUTPUT_CHANGE_NOTICE,
-  PLACEMENT_CHANGE_NOTICE,
-  SETTINGS_NOT_SAVED,
-} from "./notices";
+import { KEY_NOT_SAVED, LOGS_COPIED, LOGS_NOT_COPIED, SETTINGS_NOT_SAVED, settingsChangeNotice } from "./notices";
 import { RemoveAccountModal } from "./removeAccountModal";
 import { addAccount, parseWholeNumber, removeAccount, trimFolder, updateAccount, withField } from "./settingsEdits";
 import { SettingsSaver } from "./settingsSaver";
@@ -341,12 +333,20 @@ export class CirclebackSettingTab extends PluginSettingTab {
     );
 
     if (show.fileSettings) {
-      this.addChoice(el, settings, "baseFolderType", "Base folder", "Where notes are saved.", [
-        ["custom", "Custom folder"],
-        ["daily-notes", "Daily notes folder"],
-      ]);
+      this.addChoice(
+        el, settings, "baseFolderType", "Base folder",
+        "Where notes are saved. After a change, notes in the old folder are no longer updated.",
+        [
+          ["custom", "Custom folder"],
+          ["daily-notes", "Daily notes folder"],
+        ],
+      );
       if (show.customBaseFolder) {
-        this.addText(el, settings, "customBaseFolder", "Custom base folder", "The vault folder where notes are saved.", trimFolder);
+        this.addText(
+          el, settings, "customBaseFolder", "Custom base folder",
+          "The vault folder where notes are saved. After a change, notes in the old folder are no longer updated.",
+          trimFolder,
+        );
       }
       this.addChoice(
         el, settings, "subfolderPattern", "Subfolders",
@@ -410,7 +410,7 @@ export class CirclebackSettingTab extends PluginSettingTab {
     if (show.transcriptFolder) {
       this.addText(
         el, settings, "customTranscriptBaseFolder", "Transcript base folder",
-        "The vault folder where transcripts are saved.",
+        "The vault folder where transcripts are saved. After a change, transcripts in the old folder are no longer updated.",
         trimFolder,
       );
       this.addChoice(
@@ -641,17 +641,18 @@ export class CirclebackSettingTab extends PluginSettingTab {
   }
 
   /**
-   * What the settings changed in this visit mean for existing notes. A change to what notes say
-   * gets a notice that stays until it is dismissed or its button is used, since a full sync is
-   * what updates the older notes. A change only to folders and file names has nothing to offer: no
-   * sync moves or renames an existing note, so the notice is plain and goes by itself.
+   * What the settings changed in this visit mean for existing notes (`settingsChangeNotice` picks
+   * the words). A change to what notes say gets a notice that stays until it is dismissed or its
+   * button is used, since a full sync is what updates the older notes. A change only to folders
+   * and file names has nothing to offer: no sync moves or renames an existing note, so the notice
+   * is plain and goes by itself.
    */
   private showChangeNotice(change: SettingsChange): void {
-    if (change.output.length === 0) {
-      new Notice(PLACEMENT_CHANGE_NOTICE);
+    const { text, offerFullSync } = settingsChangeNotice(change);
+    if (!offerFullSync) {
+      new Notice(text);
       return;
     }
-    const text = change.placement.length > 0 ? OUTPUT_AND_PLACEMENT_CHANGE_NOTICE : OUTPUT_CHANGE_NOTICE;
     const fragment = createFragment((content) => {
       content.createDiv({ text });
       const button = content.createEl("button", { text: "Run full sync", cls: "mod-cta circleback-sync-notice-button" });

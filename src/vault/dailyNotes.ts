@@ -12,7 +12,7 @@ import { moment, normalizePath } from "obsidian";
 import type { App, TFile } from "obsidian";
 import { MEETING_START_FIELD } from "../api/constants";
 import type { Meeting } from "../api/schemas";
-import { upsertLinkLines, type DailyLink, type ResolveId } from "../format/dailyLinks";
+import { upsertLinkLines, type DailyLink, type ResolveLink } from "../format/dailyLinks";
 import { meetingTitle } from "../format/fields";
 import { normalizeHeading } from "../format/markdown";
 import { upsertMeetingBlock } from "../format/sections";
@@ -205,8 +205,10 @@ export class DailyNotes {
 
   /**
    * Puts a `- HH:MM - [[note|title]]` line for the meeting in the daily note of the day it started
-   * (local time), under the link heading. Does nothing unless linking is on. A missing note for the
-   * new day is created only as `createMissingDailyNotes` allows.
+   * (local time), under the link heading. The plugin's own line for the meeting, while unedited,
+   * that links to another of its files (one the user moved out of the sync folders) is pointed at
+   * `note` instead (see `upsertLinkLines`). Does nothing unless linking is on. A missing note for the new day is
+   * created only as `createMissingDailyNotes` allows.
    *
    * When `oldStart`, the start the note had before this sync, is on another day, the meeting's own
    * line is then removed from that day's note, if that note exists (it is never created to remove a
@@ -234,7 +236,7 @@ export class DailyNotes {
         linkpath: note.path.replace(/\.md$/i, ""),
         alias: title,
       };
-      const resolve = this.idResolver(file.path);
+      const resolve = this.linkResolver(file.path);
       await this.update(file, (text) => upsertLinkLines(text, s.dailyNoteLinkHeading, [link], [], resolve));
     }
 
@@ -284,16 +286,21 @@ export class DailyNotes {
   private async removeLine(date: Moment, except: TFile | null, id: string, alias: string, heading: string): Promise<void> {
     const file = await getDailyNote(this.app, date, false);
     if (file === null || file === except) return;
-    const resolve = this.idResolver(file.path);
+    const resolve = this.linkResolver(file.path);
     await this.update(file, (text) => upsertLinkLines(text, heading, [], [{ id, alias }], resolve));
   }
 
-  /** The `circleback_id` of the note a link in the given daily note points to: the cache first, then the index. */
-  private idResolver(dailyNotePath: string): ResolveId {
+  /**
+   * The note a link in the given daily note points to, and its `circleback_id`: from the cache
+   * first, then the index. A note outside the sync folders still resolves through the cache, so a
+   * line linking to a copy the user moved out is still known as that meeting's.
+   */
+  private linkResolver(dailyNotePath: string): ResolveLink {
     return (linkpath) => {
       const target = this.app.metadataCache.getFirstLinkpathDest(linkpath, dailyNotePath);
       if (target === null) return null;
-      return idOf(this.app.metadataCache.getFileCache(target)?.frontmatter) ?? idOf(this.index?.frontmatter(target));
+      const id = idOf(this.app.metadataCache.getFileCache(target)?.frontmatter) ?? idOf(this.index?.frontmatter(target));
+      return id === null ? null : { id, path: target.path };
     };
   }
 
