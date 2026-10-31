@@ -13,7 +13,11 @@ import type { Kind, MeetingIndex } from "./meetingIndex";
 export type DuplicateGroup = {
   id: string;
   kind: Kind;
-  /** The file with the earliest `circleback_first_synced` (ties by path), so every device picks the same one. */
+  /**
+   * The file with the earliest `circleback_first_synced`, ties going to the shorter path and then
+   * the path order, so every device picks the same one and a hand copy (`X copy.md`, `X 1.md`)
+   * never wins over `X.md`.
+   */
   keep: TFile;
   /** The other files for this meeting and kind, in the order `MeetingIndex.find` gives them. Never empty. */
   others: TFile[];

@@ -104,7 +104,10 @@ export class MeetingIndex {
 
   /**
    * Every file for this meeting and kind, oldest `circleback_first_synced` first. A file with
-   * no first_synced comes after those that have one. Ties are broken by path.
+   * no first_synced comes after those that have one. On a tie (both missing included), the shorter
+   * path comes first, then the lower path by code unit. A hand copy (`X copy.md` from Finder,
+   * `X 1.md` from Obsidian) keeps the original's first_synced, so its longer path sorts it after
+   * `X.md`. Every device sorts the same way.
    */
   find(id: string, kind: Kind): TFile[] {
     const group = this.groups.get(groupKey(id, kind));
@@ -119,7 +122,7 @@ export class MeetingIndex {
         if (b.synced === null) return -1;
         return compareText(a.synced, b.synced);
       }
-      return compareText(a.file.path, b.file.path);
+      return a.file.path.length - b.file.path.length || compareText(a.file.path, b.file.path);
     });
     return stamped.map(({ file }) => file);
   }

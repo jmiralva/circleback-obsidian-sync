@@ -228,7 +228,7 @@ Before the plugin creates a file, it looks for an existing file with the same me
 
 A meeting can still end up with two files. Two devices syncing the same vault at the same moment, before each one has the other's new files, can each create one. So can copying a note by hand.
 
-- **By default, duplicates are only reported.** After a sync, a notice tells you when the number of meetings with duplicates grows. The settings tab lists them under Duplicates, with a link to each file. This list shows the result of the last sync on this device. The first file in each group is the one the plugin treats as the original: the one with the earliest `circleback_first_synced`, with ties broken by path.
+- **By default, duplicates are only reported.** After a sync, a notice tells you when the number of meetings with duplicates grows. The settings tab lists them under Duplicates, with a link to each file. This list shows the result of the last sync on this device. The first file in each group is the one the plugin treats as the original: the one with the earliest `circleback_first_synced`. A tie goes to the shorter path, then to path order, so a copy such as `Standup copy.md` or `Standup 1.md` never wins over `Standup.md`.
 - **"Clean up duplicates" is off by default.** When on, the plugin moves an extra copy to the trash only if its body is unchanged since the plugin wrote it and it has no frontmatter fields beyond the plugin's own (`type` counts as the plugin's). The original is never trashed. It uses Obsidian's own trash setting.
 - **Anything else is only reported.** That includes a copy you edited, and a meeting you split into several notes by hand.
 

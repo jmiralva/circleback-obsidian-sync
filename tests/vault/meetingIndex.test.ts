@@ -79,7 +79,7 @@ describe("MeetingIndex", () => {
     expect(index.frontmatter(file(app, "Circleback/New.md"))).toMatchObject({ circleback_id: "m2" });
   });
 
-  it("orders matches by circleback_first_synced then path", async () => {
+  it("orders matches by circleback_first_synced, then path length, then path", async () => {
     const app = createFakeApp({
       files: {
         "Circleback/c.md": pluginFile({ firstSynced: "2026-10-22T08:00:00.000Z" }),
@@ -113,6 +113,71 @@ describe("MeetingIndex", () => {
       "Circleback/a-missing.md",
       "Circleback/c-missing.md",
     ]);
+  });
+
+  describe("a tie in circleback_first_synced", () => {
+    const SYNCED = "2026-10-20T10:00:00.000Z";
+
+    it("puts the shorter path first, so a hand copy never comes before the original", async () => {
+      const app = createFakeApp({
+        files: {
+          "Circleback/Standup copy.md": pluginFile({ firstSynced: SYNCED }),
+          "Circleback/Standup 1.md": pluginFile({ firstSynced: SYNCED }),
+          "Circleback/Standup.md": pluginFile({ firstSynced: SYNCED }),
+        },
+      });
+      const index = await built(app);
+      expect(paths(index.find("m1", "note"))).toEqual([
+        "Circleback/Standup.md",
+        "Circleback/Standup 1.md",
+        "Circleback/Standup copy.md",
+      ]);
+    });
+
+    it("does the same when no file has a first_synced", async () => {
+      const app = createFakeApp({
+        files: {
+          "Circleback/Standup copy.md": pluginFile({ firstSynced: null }),
+          "Circleback/Standup.md": pluginFile({ firstSynced: null }),
+        },
+      });
+      const index = await built(app);
+      expect(paths(index.find("m1", "note"))).toEqual(["Circleback/Standup.md", "Circleback/Standup copy.md"]);
+    });
+
+    it("orders paths of the same length by path, by code unit", async () => {
+      const app = createFakeApp({
+        files: {
+          "Circleback/b/Standup.md": pluginFile({ firstSynced: SYNCED }),
+          "Circleback/Standup 2.md": pluginFile({ firstSynced: SYNCED }),
+          "Circleback/a/Standup.md": pluginFile({ firstSynced: SYNCED }),
+          "Circleback/Standup 1.md": pluginFile({ firstSynced: SYNCED }),
+        },
+      });
+      const index = await built(app);
+      expect(paths(index.find("m1", "note"))).toEqual([
+        "Circleback/Standup 1.md",
+        "Circleback/Standup 2.md",
+        "Circleback/a/Standup.md",
+        "Circleback/b/Standup.md",
+      ]);
+    });
+
+    it("does not decide when first_synced differs: an earlier one beats a shorter path", async () => {
+      const app = createFakeApp({
+        files: {
+          "Circleback/Standup.md": pluginFile({ firstSynced: "2026-10-21T10:00:00.000Z" }),
+          "Circleback/Standup copy.md": pluginFile({ firstSynced: "2026-10-20T10:00:00.000Z" }),
+          "Circleback/S.md": pluginFile({ firstSynced: null }),
+        },
+      });
+      const index = await built(app);
+      expect(paths(index.find("m1", "note"))).toEqual([
+        "Circleback/Standup copy.md",
+        "Circleback/Standup.md",
+        "Circleback/S.md",
+      ]);
+    });
   });
 
   it("orders paths by code unit, not by locale, so every device picks the same file", async () => {

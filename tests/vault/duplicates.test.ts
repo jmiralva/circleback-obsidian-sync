@@ -53,7 +53,7 @@ describe("findDuplicates", () => {
     expect(paths(groups[0].others)).toEqual(["Circleback/mid.md", "Circleback/late.md"]);
   });
 
-  it("breaks a tie by path", async () => {
+  it("breaks a tie between paths of the same length by path", async () => {
     const app = createFakeApp({
       files: {
         "Circleback/b.md": pluginFile({ firstSynced: "2026-10-20T00:00:00.000Z" }),
@@ -63,6 +63,24 @@ describe("findDuplicates", () => {
     const [group] = findDuplicates(await indexOf(app));
     expect(group.keep.path).toBe("Circleback/a.md");
     expect(paths(group.others)).toEqual(["Circleback/b.md"]);
+  });
+
+  it("keeps the original over a hand copy with the same first_synced, and cleans up the copy", async () => {
+    const synced = "2026-10-20T00:00:00.000Z";
+    const app = createFakeApp({
+      files: {
+        "Circleback/Standup 1.md": pluginFile({ firstSynced: synced }),
+        "Circleback/Standup copy.md": pluginFile({ firstSynced: synced }),
+        "Circleback/Standup.md": pluginFile({ firstSynced: synced }),
+      },
+    });
+    const [group] = findDuplicates(await indexOf(app));
+    expect(group.keep.path).toBe("Circleback/Standup.md");
+    expect(paths(group.others)).toEqual(["Circleback/Standup 1.md", "Circleback/Standup copy.md"]);
+
+    const result = await cleanUpDuplicates(app, [group]);
+    expect(result.trashed).toEqual(["Circleback/Standup 1.md", "Circleback/Standup copy.md"]);
+    expect(app.exists("Circleback/Standup.md")).toBe(true);
   });
 
   it("ignores meetings with one file, and a note and its transcript are not duplicates", async () => {
