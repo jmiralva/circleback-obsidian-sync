@@ -205,10 +205,12 @@ export class DailyNotes {
 
   /**
    * Puts a `- HH:MM - [[note|title]]` line for the meeting in the daily note of the day it started
-   * (local time), under the link heading. The plugin's own line for the meeting, while unedited,
-   * that links to another of its files (one the user moved out of the sync folders) is pointed at
-   * `note` instead (see `upsertLinkLines`). Does nothing unless linking is on. A missing note for the new day is
-   * created only as `createMissingDailyNotes` allows.
+   * (local time), under the link heading. The plugin's own line for the meeting, while it still
+   * reads as the plugin would write it now (the meeting's current title as its alias), is kept
+   * current on every call: rewritten where it is to the line for `note` with the current start time,
+   * whichever file of the meeting it linked to (see `upsertLinkLines`). Every other line is left
+   * alone. Does nothing unless linking is on. A missing note for the new day is created only as
+   * `createMissingDailyNotes` allows.
    *
    * When `oldStart`, the start the note had before this sync, is on another day, the meeting's own
    * line is then removed from that day's note, if that note exists (it is never created to remove a

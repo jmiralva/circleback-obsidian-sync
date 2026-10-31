@@ -9,12 +9,15 @@
 //   line still reads exactly as the plugin would write it now (same alias). A line the user edited
 //   (extra text, a changed alias) is left alone, even though it still anchors the time order and
 //   still counts as the meeting being present.
-// - A meeting whose note is already linked in the section, in any form, gets nothing added.
-// - An own line for the meeting that links to another of its files (a note the user moved out of
-//   the sync folders, which no longer counts) is pointed at the note being linked, where it is,
-//   but only while it reads as the plugin would write it now (same alias). Any other line that
-//   links to the meeting, such as one the user edited, counts as the meeting being present:
-//   nothing is added.
+// - Each time a meeting is linked, the plugin's own line for it is rewritten, in place, to exactly
+//   what the plugin would write now: the current time, the full path of the note being linked, and
+//   the current title. That fixes a link Obsidian shortened (a name only is ambiguous once another
+//   file has the same name), one that points to a copy the user moved out of the sync folders
+//   (which no longer counts), and a start time that changed. An own line that is already current
+//   is not touched. Only a line that still reads as the plugin would write it now (same alias)
+//   counts as an own line for this: the rest is the user's.
+// - Any other line that links to the meeting, such as one the user edited or one from another
+//   tool, counts as the meeting being present: nothing is added, and the line is never touched.
 // - Nothing else in the note changes, down to line endings.
 //
 // Pure: the caller supplies `resolveLink`, which turns a link target into the note it points to.
@@ -120,30 +123,35 @@ function addLink(lines: Line[], spec: HeadingSpec, link: DailyLink, resolve: Res
 
   // The note the new line links to, to tell it from the meeting's other files.
   const notePath = resolve(link.linkpath)?.path ?? null;
+  const alias = cleanAlias(link.alias);
   const own: Array<{ index: number; time: string }> = [];
-  let stale: Line | null = null;
+  let current: Line | null = null;
   let mentioned = false;
   for (let i = section.headingIndex + 1; i < section.end; i++) {
     if (section.verbatim[i]) continue;
-    const current = lines[i]?.text ?? "";
-    const targets = linkTargets(current, resolve);
-    // This very note is linked already, in whatever form: nothing to do.
-    if (targets.some((target) => target.path === notePath)) return;
-    const found = ownLine(current, resolve);
-    if (found?.target.id === link.id) {
-      // Only a line that still reads as the plugin would write it now: a changed alias is the user's edit.
-      if (found.alias === cleanAlias(link.alias)) stale ??= lines[i] ?? null;
-      else mentioned = true;
-    } else if (found !== null) {
-      own.push({ index: i, time: found.time });
-    } else if (targets.some((target) => target.id === link.id)) {
+    const existing = lines[i]?.text ?? "";
+    const found = ownLine(existing, resolve);
+    if (found?.target.id === link.id && found.alias === alias) {
+      // The plugin's own line for this meeting, still reading as the plugin would write it now,
+      // whichever of the meeting's files it links to. The first one is the one kept current.
+      current ??= lines[i] ?? null;
+      continue;
+    }
+    // Any other line that links to this very note, in whatever form: the user's line, nothing to do.
+    if (linkTargets(existing, resolve).some((target) => target.path === notePath)) return;
+    if (found === null) {
+      if (linkTargets(existing, resolve).some((target) => target.id === link.id)) mentioned = true;
+    } else if (found.target.id === link.id) {
+      // The meeting, but not the plugin's title for it: the user's edit, or an older title.
       mentioned = true;
+    } else {
+      own.push({ index: i, time: found.time });
     }
   }
 
-  if (stale !== null) {
-    // The plugin's own line, linking to another file of this meeting (one moved out of the sync folders).
-    stale.text = text;
+  if (current !== null) {
+    // Assigning the text it already has changes nothing, so a line that is current stays as it is.
+    current.text = text;
     return;
   }
   // A line the user edited, linking to the meeting: their edit wins.
@@ -159,15 +167,19 @@ function addLink(lines: Line[], spec: HeadingSpec, link: DailyLink, resolve: Res
  * Adds a line for each link in `add` and removes the own lines of the meetings in `remove`,
  * in the section under `heading`. Returns the text unchanged when there is nothing to do.
  *
- * - A new line goes before the first own line with a later time. With none, it goes after the
- *   section's last non-blank line (so a blank line before the next heading stays).
+ * - When a line in the section links to the note a link is for, and it is not the plugin's own line
+ *   for that meeting (one the user edited, or one from another tool), nothing changes for that link.
+ * - Otherwise, the plugin's own line for the meeting, if there is one, is rewritten where it is to
+ *   exactly what the plugin writes for this link now (the time, the path, the title as alias). An
+ *   own line is one in the plugin's format that links to a file of the meeting (this note, a copy
+ *   the user moved, or a shortened link) and whose alias is the one this link has (after
+ *   cleaning). With several, the first is rewritten and the others stay. One that is already
+ *   current stays byte for byte, and one is never moved to keep the time order.
+ * - With no own line, any other line that links to the meeting, one the user edited, means
+ *   nothing is added.
+ * - Otherwise a new line goes before the first own line with a later time. With none, it goes
+ *   after the section's last non-blank line (so a blank line before the next heading stays).
  * - With no such section, `heading` and the lines are appended at the end of the note.
- * - When a line in the section already links to the note a link is for, by an own line or one
- *   the user edited, nothing changes for that link.
- * - Otherwise, the first own line for the meeting (linking to another of its files) whose alias is
- *   exactly the one this link has (after cleaning) is replaced, where it is, by the line for this
- *   link. With none, any other line that links to the meeting, one the user edited, means nothing
- *   is added.
  * - A line is removed only if it is an own line for a meeting in `remove` and its alias is exactly
  *   the one given there (after the same cleaning new lines get). Any other line stays.
  */

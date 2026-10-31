@@ -345,11 +345,39 @@ describe("DailyNotes.linkMeeting", () => {
     await fake.fileManager.renameFile(note, "Meetings/Circleback/2026-10-26 - Meeting 1.md");
     const daily = file(fake, DAY_26);
     await fake.vault.modify(daily, fake.fileText(DAY_26).replace("Meetings/Circleback/Meeting 1", "2026-10-26 - Meeting 1"));
-    const rewritten = fake.fileText(DAY_26);
+    expect(fake.fileText(DAY_26)).toContain("[[2026-10-26 - Meeting 1|Meeting 1]]");
 
+    // The line is still found as the meeting's, so no second line is added. It is the plugin's own,
+    // so it is written back in the full form.
     await dailyNotes.linkMeeting(note, meeting(), null, settings(), NOW);
-    expect(fake.fileText(DAY_26)).toBe(rewritten);
-    expect(rewritten.match(/- 10:00 - /g)).toHaveLength(1);
+    expect(fake.fileText(DAY_26)).toContain("- 10:00 - [[Meetings/Circleback/2026-10-26 - Meeting 1|Meeting 1]]");
+    expect(fake.fileText(DAY_26).match(/- 10:00 - /g)).toHaveLength(1);
+  });
+
+  it("rewrites its own short, ambiguous link to the full path of the note in the sync folder", async () => {
+    // The user moved the note out of the sync folder, Obsidian shortened the link, and the next sync
+    // wrote a fresh note with the same name. The short link now means either file.
+    const fake = app({
+      "Archive/Meeting 1.md": pluginFile({ id: ONE.id }),
+      [DAY_26]: "# Day\n\n## Meetings\n- 09:00 - standup\n- 10:00 - [[Meeting 1|Meeting 1]]\n- 11:00 - lunch\n",
+    });
+    expect(fake.metadataCache.getFirstLinkpathDest("Meeting 1", DAY_26)?.path).toBe("Archive/Meeting 1.md");
+    const process = jest.spyOn(fake.vault, "process");
+    const dailyNotes = new DailyNotes(fake);
+
+    await dailyNotes.linkMeeting(file(fake, NOTE_PATH), meeting(), null, settings(), NOW);
+    expect(fake.fileText(DAY_26)).toBe(`# Day\n\n## Meetings\n- 09:00 - standup\n- 10:00 - ${LINK}\n- 11:00 - lunch\n`);
+    expect(process).toHaveBeenCalledTimes(1);
+
+    // Current now: the next sync writes nothing.
+    await dailyNotes.linkMeeting(file(fake, NOTE_PATH), meeting(), null, settings(), NOW);
+    expect(process).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives its own line the meeting's current start time, where the line is", async () => {
+    const fake = app({ [DAY_26]: `# Day\n\n## Meetings\n- 09:30 - ${LINK}\n- 10:30 - [[Meetings/Granola/x|x]]\n` });
+    await new DailyNotes(fake).linkMeeting(file(fake, NOTE_PATH), meeting(), null, settings(), NOW);
+    expect(fake.fileText(DAY_26)).toBe(`# Day\n\n## Meetings\n- 10:00 - ${LINK}\n- 10:30 - [[Meetings/Granola/x|x]]\n`);
   });
 
   it("finds its line through the meeting index when the metadata cache has not seen the note yet", async () => {
@@ -561,14 +589,15 @@ describe("DailyNotes.linkMeeting", () => {
       expect(fake.fileText("0-periodic/daily/2026-10-28.md")).toContain(`- 00:00 - ${LINK}`);
     });
 
-    it("leaves the line alone when only the time changed", async () => {
+    it("gives the line the new time, where it is, when only the time changed", async () => {
       const fake = app();
       const dailyNotes = new DailyNotes(fake);
       const note = file(fake, NOTE_PATH);
       await dailyNotes.linkMeeting(note, meeting(), null, settings(), NOW);
-      const before = fake.fileText(DAY_26);
+      expect(fake.fileText(DAY_26)).toContain(`- 10:00 - ${LINK}`);
       await dailyNotes.linkMeeting(note, at("2026-10-26T16:30:00.000Z"), START, settings(), NOW);
-      expect(fake.fileText(DAY_26)).toBe(before);
+      expect(fake.fileText(DAY_26)).toContain(`- 11:30 - ${LINK}`);
+      expect(fake.fileText(DAY_26)).not.toContain("10:00");
     });
 
     it("does nothing to an old day when linking is off", async () => {

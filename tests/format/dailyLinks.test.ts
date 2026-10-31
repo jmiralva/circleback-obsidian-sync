@@ -11,8 +11,9 @@ const NOTES: Record<string, LinkTarget> = {
   // meeting a, but not the one the plugin links to now.
   "Archive/a": { id: "a", path: "Archive/a.md" },
   "Other/a": { id: "a", path: "Other/a.md" },
-  // A short link that Obsidian resolves to the note in the sync folder.
+  // Short links that Obsidian resolves to the notes in the sync folder.
   a: { id: "a", path: "Circleback/a.md" },
+  b: { id: "b", path: "Circleback/b.md" },
 };
 const resolveId = (linkpath: string): LinkTarget | null => NOTES[linkpath] ?? null;
 
@@ -134,11 +135,6 @@ ${own("a", "10:00")}
 ${own("a", "10:00")}`);
     });
 
-    it("leaves an own line that already points to the file being linked, even as a short link", () => {
-      const text = note("- 10:00 - [[a|A]]");
-      expect(add(text, link("a", "10:00"))).toBe(text);
-    });
-
     it("leaves a line the user edited that links to another file of the meeting, and adds no second line", () => {
       for (const edited of ["- 10:00 - [[Archive/a|A]] (filed under the project)", "- see [[Archive/a]]"]) {
         const text = note(edited);
@@ -164,6 +160,119 @@ ${own("a", "10:00")}`);
     it("does not touch another meeting's own line", () => {
       const text = note(own("b", "10:00"));
       expect(add(text, link("a", "10:00"))).toBe(note(own("b", "10:00"), own("a", "10:00")));
+    });
+  });
+
+  describe("keeping the plugin's own line for a meeting current", () => {
+    it("writes a short link to the note being linked as the full path, in place", () => {
+      // Obsidian shortens a link to the file name when it can. The short form is the note's name only,
+      // so it stops pointing at the right file as soon as another file has the same name.
+      const text = note("- 09:00 - standup", "- 10:00 - [[a|A]]", own("b", "11:00"));
+      expect(add(text, link("a", "10:00"))).toBe(note("- 09:00 - standup", own("a", "10:00"), own("b", "11:00")));
+    });
+
+    it("points a link to a moved copy at the note being linked", () => {
+      const text = note("- 09:00 - standup", "- 10:00 - [[Archive/a|A]]", own("b", "11:00"));
+      expect(add(text, link("a", "10:00"))).toBe(note("- 09:00 - standup", own("a", "10:00"), own("b", "11:00")));
+    });
+
+    it("gives the line the current time, where it is", () => {
+      const text = note(own("a", "09:00"), own("b", "10:00"));
+      expect(add(text, link("a", "09:30"))).toBe(note(own("a", "09:30"), own("b", "10:00")));
+    });
+
+    it("does not move the line to keep the time order when its time changes", () => {
+      const text = note(own("a", "09:00"), own("b", "10:00"));
+      expect(add(text, link("a", "11:00"))).toBe(note(own("a", "11:00"), own("b", "10:00")));
+      const later = note(own("a", "11:00"), own("b", "10:00"));
+      expect(add(later, link("a", "08:00"))).toBe(note(own("a", "08:00"), own("b", "10:00")));
+    });
+
+    it("fixes the time and the path of a line in one go", () => {
+      expect(add(note("- 09:00 - [[a|A]]"), link("a", "10:00"))).toBe(note(own("a", "10:00")));
+    });
+
+    it("returns a note whose line is already current unchanged", () => {
+      const text = note("- 09:00 - standup", own("a", "10:00"), own("b", "11:00"));
+      expect(add(text, link("a", "10:00"))).toBe(text);
+      expect(add(text, link("a", "10:00"), link("b", "11:00"))).toBe(text);
+    });
+
+    it("rewrites the line to the cleaned current title only while the line has that title", () => {
+      const text = note("- 10:00 - [[a|Q3 [draft_ _ review]]");
+      expect(add(text, link("a", "10:30", "Q3 [draft] | review"))).toBe(note("- 10:30 - [[Circleback/a|Q3 [draft_ _ review]]"));
+    });
+
+    it("leaves a line you edited alone, and adds no second line", () => {
+      for (const edited of [
+        "- 10:00 - [[a|A]] (moved to 10:30)",
+        "- 10:00 - [[Circleback/a|A]] (moved to 10:30)",
+        "- 09:00 - [[a|A]] ",
+        "- 10:00 - [[Circleback/a|my notes on the call]]",
+        "- 10:00 - [[a|my notes on the call]]",
+        "- see [[a]]",
+      ]) {
+        const text = note(edited);
+        expect(add(text, link("a", "10:30"))).toBe(text);
+      }
+    });
+
+    it("leaves a line that still shows an older title, and adds no second line", () => {
+      const text = note("- 10:00 - [[a|Old title]]", "- 10:00 - [[Archive/a|Old title]]");
+      expect(add(text, link("a", "10:30", "New title"))).toBe(text);
+    });
+
+    it("leaves lines from other tools and hand-typed lines alone, whatever they say", () => {
+      const text = note(
+        "- 09:00 - [[Meetings/Granola/a|A]]",
+        "- 10:00 - a standup, the A meeting",
+        "- [[Meetings/Granola/x|x]] with A",
+        own("b", "11:00"),
+      );
+      expect(add(text, link("a", "10:00"))).toBe(
+        note(
+          "- 09:00 - [[Meetings/Granola/a|A]]",
+          "- 10:00 - a standup, the A meeting",
+          "- [[Meetings/Granola/x|x]] with A",
+          own("a", "10:00"),
+          own("b", "11:00"),
+        ),
+      );
+    });
+
+    it("updates the first of several own lines and leaves the rest", () => {
+      const text = note("- 09:00 - [[a|A]]", "- 09:30 - [[Archive/a|A]]", "- 10:15 - [[Other/a|A]]");
+      expect(add(text, link("a", "10:00"))).toBe(note(own("a", "10:00"), "- 09:30 - [[Archive/a|A]]", "- 10:15 - [[Other/a|A]]"));
+    });
+
+    it("skips a line you edited to update the own line after it", () => {
+      const text = note("- 10:00 - [[Archive/a|my notes]]", "- 10:00 - [[Archive/a|A]]");
+      expect(add(text, link("a", "10:30"))).toBe(note("- 10:00 - [[Archive/a|my notes]]", own("a", "10:30")));
+    });
+
+    it("leaves a line alone when another line you wrote links to the note being linked", () => {
+      const text = note("- 09:00 - [[a|A]]", "- [[Circleback/a]] my notes");
+      expect(add(text, link("a", "10:00"))).toBe(text);
+    });
+
+    it("leaves the other meetings' own lines alone", () => {
+      const text = note("- 09:00 - [[b|B]]", own("b", "10:00"), own("a", "11:00"));
+      expect(add(text, link("a", "11:30"))).toBe(note("- 09:00 - [[b|B]]", own("b", "10:00"), own("a", "11:30")));
+    });
+
+    it("keeps the line ending and a missing newline at the end of the note", () => {
+      expect(add(`${HEADING}\r\n- 09:00 - [[a|A]]\r\n- x\r\n`, link("a", "10:00"))).toBe(`${HEADING}\r\n${own("a", "10:00")}\r\n- x\r\n`);
+      expect(add(`${HEADING}\n- 09:00 - [[a|A]]`, link("a", "10:00"))).toBe(`${HEADING}\n${own("a", "10:00")}`);
+    });
+
+    it("does not rewrite a line outside the section", () => {
+      const text = ["# Daily", "- 09:00 - [[a|A]]", "", HEADING, "", "## Tasks", ""].join("\n");
+      expect(add(text, link("a", "10:00"))).toBe(["# Daily", "- 09:00 - [[a|A]]", "", HEADING, own("a", "10:00"), "", "## Tasks", ""].join("\n"));
+    });
+
+    it("does not rewrite a line inside a code block", () => {
+      const text = note("```", "- 09:00 - [[a|A]]", "```");
+      expect(add(text, link("a", "10:00"))).toBe(note("```", "- 09:00 - [[a|A]]", "```", own("a", "10:00")));
     });
   });
 
