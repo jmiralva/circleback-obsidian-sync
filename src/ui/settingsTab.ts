@@ -307,8 +307,8 @@ export class CirclebackSettingTab extends PluginSettingTab {
       if (shownKey !== null && sameKeyRowView(shownKey, view)) return;
       if (shownKey === null || shownKey.status !== view.status) keySetting.setDesc(view.status);
       shownKey = view;
-      // Only the field's state, placeholder and name change here, and never what is on the page:
-      // the buttons stay where they are, so a click that moves the focus away from the field still lands.
+      // Entering or leaving Replacing changes only the field's state, placeholder and name, never
+      // which buttons show, so a click that moves the focus away from the field still lands.
       if (keyRow.text !== null) {
         keyRow.text.setPlaceholder(view.placeholder);
         keyRow.text.setDisabled(view.disabled);
