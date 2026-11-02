@@ -6,12 +6,12 @@
 // Saving is in settingsSaver.ts: toggles and dropdowns save at once, text and number fields once
 // typing pauses, and the tab asks the saver to save what is waiting before it redraws, starts a
 // sync, or closes.
-import { Notice, PluginSettingTab, Setting, debounce } from "obsidian";
+import { Notice, PluginSettingTab, Scope, Setting, debounce } from "obsidian";
 import type { App, ButtonComponent, TextComponent } from "obsidian";
 import type CirclebackSyncPlugin from "../main";
 import type { AccountConfig, CirclebackSyncSettings } from "../settings/types";
 import { logger } from "../util/logger";
-import { clearKey, commitKey, testKey } from "./accountKeys";
+import { clearKey, commitKey, hasTypedKey, testKey } from "./accountKeys";
 import type { KeyChange } from "./accountKeys";
 import { KEY_NOT_SAVED, LOGS_COPIED, LOGS_NOT_COPIED, SETTINGS_NOT_SAVED, settingsChangeNotice } from "./notices";
 import { RemoveAccountModal } from "./removeAccountModal";
@@ -20,6 +20,7 @@ import { SettingsSaver } from "./settingsSaver";
 import type { Edit, SettingsChange } from "./settingsSaver";
 import {
   REMOVE_ACCOUNT_TEXT,
+  REPLACE_KEY_BUTTON,
   accountTitle,
   duplicatesView,
   fullSyncButtonText,
@@ -78,6 +79,8 @@ export class CirclebackSettingTab extends PluginSettingTab {
   private fullSyncButton: ButtonComponent | null = null;
   /** Per account on the page now, what brings its status line up to date without a redraw. */
   private readonly accountRefreshers = new Map<string, () => void>();
+  /** Per account on the page now, what lets go of the Escape key that its key field holds while a new key is typed. */
+  private readonly escapeReleasers = new Map<string, () => void>();
   /** The part of the Duplicates section under its toggle, and what it shows now. */
   private duplicatesEl: HTMLElement | null = null;
   private shownDuplicates: DuplicatesView | null = null;
@@ -127,6 +130,9 @@ export class CirclebackSettingTab extends PluginSettingTab {
   private forgetPage(): void {
     this.fullSyncButton = null;
     this.accountRefreshers.clear();
+    // The field may still hold the Escape key when its page goes away, and a removed field does not blur.
+    for (const release of this.escapeReleasers.values()) release();
+    this.escapeReleasers.clear();
     this.duplicatesEl = null;
     this.shownDuplicates = null;
   }
@@ -210,36 +216,116 @@ export class CirclebackSettingTab extends PluginSettingTab {
 
     // The key row changes in place when the key changes. A redraw would replace the button the user
     // is clicking: leaving the field fires `change`, which comes before the click on the next control.
-    const keyRow: { text: TextComponent | null; clear: ButtonComponent | null } = { text: null, clear: null };
+    const keyRow: { text: TextComponent | null; replace: ButtonComponent | null; clear: ButtonComponent | null } = {
+      text: null,
+      replace: null,
+      clear: null,
+    };
+    // Whether the user opened the locked field with "Replace key" and has not saved or backed out.
+    // It lives in the open tab only: a redraw starts with a stored key locked again.
+    let replacing = false;
+    // The Test connection row is built below this one. A saved key is tested through its button.
+    let testButton: ButtonComponent | null = null;
     const keySetting = new Setting(block).setName("API key");
     keySetting.addText((text) => {
       keyRow.text = text;
-      text.inputEl.type = "password";
-      text.inputEl.autocomplete = "off";
+      const input = text.inputEl;
+      input.type = "password";
+      input.autocomplete = "off";
       // `change` fires on Enter or when the field loses focus, not on every key press.
-      text.inputEl.addEventListener("change", () => showKeyChange(commitKey(this.plugin, id, text.inputEl.value)));
+      input.addEventListener("change", () => {
+        // Only "Clear key" clears a key. An empty field, or one with only spaces, saves nothing.
+        if (!hasTypedKey(input.value)) {
+          input.value = "";
+          return;
+        }
+        showKeyChange(commitKey(this.plugin, id, input.value));
+      });
+      input.addEventListener("focus", () => {
+        if (replacing) holdEscape();
+      });
+      // A key that was typed is saved by `change`, which comes first. This only backs out of an empty field.
+      input.addEventListener("blur", () => {
+        releaseEscape();
+        // Switching to another app, for example to copy the key there, blurs the field but leaves it
+        // the focused element of the page. That is not leaving the field.
+        const page = input.ownerDocument;
+        if (page.activeElement === input || !page.hasFocus()) return;
+        if (replacing && !hasTypedKey(input.value)) leaveReplacing();
+      });
+    });
+    keySetting.addButton((button) => {
+      keyRow.replace = button;
+      button.setButtonText(REPLACE_KEY_BUTTON).onClick(() => {
+        if (!replacing) {
+          replacing = true;
+          keyRow.text?.setValue("");
+          showKey();
+        }
+        // Already replacing: the field may hold a key that could not be saved. Keep it.
+        keyRow.text?.inputEl.focus();
+      });
     });
     keySetting.addButton((button) => {
       keyRow.clear = button;
       button.setButtonText("Clear key").onClick(() => showKeyChange(clearKey(this.plugin, id)));
     });
+    // While a new key is typed, Escape backs out and drops it. The settings window takes Escape before
+    // the field sees it and moves the focus away, which would save what was typed. So the field takes
+    // Escape through a scope of its own, which is the active one only while the field has the focus.
+    let escapeScope: Scope | null = null;
+    const holdEscape = (): void => {
+      if (escapeScope !== null) return;
+      const scope = new Scope();
+      scope.register([], "Escape", () => {
+        leaveReplacing();
+        // The one place the focus is put somewhere on purpose: the disabled field cannot keep it.
+        keyRow.replace?.buttonEl.focus();
+        // Returning false tells Obsidian the key is handled, so the window does not act on it.
+        return false;
+      });
+      escapeScope = scope;
+      this.app.keymap.pushScope(scope);
+    };
+    const releaseEscape = (): void => {
+      if (escapeScope === null) return;
+      this.app.keymap.popScope(escapeScope);
+      escapeScope = null;
+    };
+    this.escapeReleasers.set(id, releaseEscape);
     let shownKey: KeyRowView | null = null;
     const showKey = (): void => {
+      const hasKey = this.plugin.keys.get(id) !== null;
+      // A key that is gone cannot be replaced.
+      if (!hasKey) replacing = false;
+      if (!replacing) releaseEscape();
       // The stored key is never shown, and neither is a stand-in: the field's value stays empty
       // until something is pasted, and a placeholder of dots makes it look filled.
-      const view = keyRowView(this.plugin.keys.get(id) !== null, this.plugin.device.account(id));
+      const view = keyRowView(hasKey, this.plugin.device.account(id), replacing);
       // This runs on every status update, including each progress tick of a full sync. Writing
       // what is already there would drop a text selection in the status line.
       if (shownKey !== null && sameKeyRowView(shownKey, view)) return;
+      if (shownKey === null || shownKey.status !== view.status) keySetting.setDesc(view.status);
       shownKey = view;
-      keySetting.setDesc(view.status);
+      // Only the field's state, placeholder and name change here, and never what is on the page:
+      // the buttons stay where they are, so a click that moves the focus away from the field still lands.
       if (keyRow.text !== null) {
         keyRow.text.setPlaceholder(view.placeholder);
-        keyRow.text.inputEl.toggleClass(KEY_STORED_CLASS, view.keyStored);
+        keyRow.text.setDisabled(view.disabled);
+        keyRow.text.inputEl.toggleClass(KEY_STORED_CLASS, view.disabled);
         keyRow.text.inputEl.setAttribute("aria-label", view.ariaLabel);
       }
+      if (view.canReplace) keyRow.replace?.buttonEl.show();
+      else keyRow.replace?.buttonEl.hide();
       if (view.canClear) keyRow.clear?.buttonEl.show();
       else keyRow.clear?.buttonEl.hide();
+    };
+    /** Back to a locked field with the stored key, which is unchanged. What was typed is dropped. */
+    const leaveReplacing = (): void => {
+      if (!replacing) return;
+      replacing = false;
+      keyRow.text?.setValue("");
+      showKey();
     };
     const showKeyChange = (change: KeyChange): void => {
       if (!change.ok) {
@@ -247,12 +333,15 @@ export class CirclebackSettingTab extends PluginSettingTab {
         new Notice(KEY_NOT_SAVED);
         return;
       }
+      replacing = false;
       keyRow.text?.setValue("");
       // The result belongs to the old key.
       this.testResults.delete(id);
       resultEl.setText("");
       this.plugin.refreshStatus();
       showKey();
+      // A new key is tested at once, the way "Test connection" would. Clearing a key has nothing to test.
+      if (change.hasKey && testButton !== null) void this.testConnection(id, testButton, resultEl);
     };
     showKey();
     // The status line under the key follows each sync.
@@ -261,12 +350,13 @@ export class CirclebackSettingTab extends PluginSettingTab {
     new Setting(block)
       .setName("Test connection")
       .setDesc("Checks the API key and shows the email it belongs to.")
-      .addButton((button) =>
+      .addButton((button) => {
+        testButton = button;
         button.setButtonText("Test connection").onClick(() => {
           void this.testConnection(id, button, resultEl);
-        }),
-      );
-    // Under the button's row. It is created after the row; the click handler above reaches it later.
+        });
+      });
+    // Under the button's row. It is created after the row; the handlers above reach it later.
     const resultEl = block.createDiv({ cls: "circleback-sync-test-result", text: this.testResults.get(id) ?? "" });
 
     new Setting(block)

@@ -6,11 +6,14 @@ import {
   DUPLICATES_INTRO,
   KEY_LABEL,
   KEY_PLACEHOLDER,
+  KEY_REPLACING_LABEL,
+  KEY_REPLACING_PLACEHOLDER,
   KEY_STORED_LABEL,
   KEY_STORED_PLACEHOLDER,
   NO_DUPLICATES,
   NO_KEY_TO_TEST,
   REMOVE_ACCOUNT_TEXT,
+  REPLACE_KEY_BUTTON,
   UNNAMED_ACCOUNT,
   accountStatusLine,
   accountTitle,
@@ -24,6 +27,7 @@ import {
   sameKeyRowView,
   settingsVisibility,
 } from "../../src/ui/settingsView";
+import type { KeyRowView } from "../../src/ui/settingsView";
 import { logger } from "../../src/util/logger";
 
 function settings(changes: Partial<CirclebackSyncSettings> = {}): CirclebackSyncSettings {
@@ -159,59 +163,118 @@ describe("checkConnection logging", () => {
 });
 
 describe("keyRowView", () => {
-  it("offers to paste a key, and no way to clear one, when this device has none", () => {
-    expect(keyRowView(false, {})).toEqual({
-      status: "Key needed on this device",
-      placeholder: KEY_PLACEHOLDER,
-      keyStored: false,
-      ariaLabel: KEY_LABEL,
-      canClear: false,
+  describe("when this device has no key", () => {
+    it("offers an enabled, empty field and no buttons", () => {
+      expect(keyRowView(false, {}, false)).toEqual({
+        status: "Key needed on this device",
+        placeholder: KEY_PLACEHOLDER,
+        ariaLabel: KEY_LABEL,
+        disabled: false,
+        canReplace: false,
+        canClear: false,
+      });
     });
-    expect(KEY_PLACEHOLDER).toBe("Paste your Circleback API key");
-    expect(KEY_LABEL).toBe("API key");
-  });
 
-  it("shows a row of dots, and offers to clear the key, when this device has one", () => {
-    expect(keyRowView(true, { lastSuccessAt: "2026-10-27T15:42:00.000Z" })).toEqual({
-      status: "Last synced Oct 27, 10:42",
-      placeholder: KEY_STORED_PLACEHOLDER,
-      keyStored: true,
-      ariaLabel: KEY_STORED_LABEL,
-      canClear: true,
+    it("has the texts of the spec", () => {
+      expect(KEY_PLACEHOLDER).toBe("Paste your Circleback API key");
+      expect(KEY_LABEL).toBe("API key");
+    });
+
+    it("ignores replacing: there is no key to replace", () => {
+      expect(keyRowView(false, {}, true)).toEqual(keyRowView(false, {}, false));
     });
   });
 
-  it("uses exactly 12 bullet dots, so the field looks filled", () => {
-    expect(KEY_STORED_PLACEHOLDER).toBe("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022");
-    expect(KEY_STORED_PLACEHOLDER).toHaveLength(12);
-    expect(keyRowView(true, {}).placeholder).toBe(KEY_STORED_PLACEHOLDER);
+  describe("when this device has the key", () => {
+    it("locks the field behind a row of dots, and offers Replace key and Clear key", () => {
+      expect(keyRowView(true, { lastSuccessAt: "2026-10-27T15:42:00.000Z" }, false)).toEqual({
+        status: "Last synced Oct 27, 10:42",
+        placeholder: KEY_STORED_PLACEHOLDER,
+        ariaLabel: KEY_STORED_LABEL,
+        disabled: true,
+        canReplace: true,
+        canClear: true,
+      });
+    });
+
+    it("uses exactly 12 bullet dots, so the field looks filled", () => {
+      expect(KEY_STORED_PLACEHOLDER).toBe("\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022");
+      expect(KEY_STORED_PLACEHOLDER).toHaveLength(12);
+      expect(keyRowView(true, {}, false).placeholder).toBe(KEY_STORED_PLACEHOLDER);
+    });
+
+    it("says in words that a key is stored and how to change it, for screen readers", () => {
+      expect(KEY_STORED_LABEL).toBe("API key stored on this device. Use Replace key to change it.");
+      expect(keyRowView(true, {}, false).ariaLabel).toBe(KEY_STORED_LABEL);
+    });
+
+    it("shows why an account stopped", () => {
+      expect(keyRowView(true, { failing: true, lastError: "auth" }, false).status).toBe(
+        "Stopped syncing because the API key was not accepted",
+      );
+    });
   });
 
-  it("says in words that a key is stored, for screen readers", () => {
-    expect(KEY_STORED_LABEL).toBe("API key stored on this device. Paste a new key to replace it.");
-    expect(keyRowView(true, {}).ariaLabel).toBe(KEY_STORED_LABEL);
-    expect(keyRowView(false, {}).ariaLabel).toBe("API key");
-  });
+  describe("while replacing the key", () => {
+    it("opens the field for a new key and still offers both buttons", () => {
+      expect(keyRowView(true, { lastSuccessAt: "2026-10-27T15:42:00.000Z" }, true)).toEqual({
+        status: "Last synced Oct 27, 10:42",
+        placeholder: KEY_REPLACING_PLACEHOLDER,
+        ariaLabel: KEY_REPLACING_LABEL,
+        disabled: false,
+        canReplace: true,
+        canClear: true,
+      });
+    });
 
-  it("shows why an account stopped, when it has a key", () => {
-    expect(keyRowView(true, { failing: true, lastError: "auth" }).status).toBe(
-      "Stopped syncing because the API key was not accepted",
-    );
+    it("has the texts of the spec", () => {
+      expect(KEY_REPLACING_PLACEHOLDER).toBe("Paste the new API key");
+      expect(KEY_REPLACING_LABEL).toBe("New API key");
+      expect(REPLACE_KEY_BUTTON).toBe("Replace key");
+    });
+
+    it("keeps the status line of the stored key", () => {
+      const state = { failing: true, lastError: "auth" } as const;
+      expect(keyRowView(true, state, true).status).toBe(keyRowView(true, state, false).status);
+    });
   });
 });
 
 describe("sameKeyRowView", () => {
+  const state = { lastSuccessAt: "2026-10-27T15:42:00.000Z" };
+
   it("is true for views that show the same", () => {
-    const state = { lastSuccessAt: "2026-10-27T15:42:00.000Z" };
-    expect(sameKeyRowView(keyRowView(true, state), keyRowView(true, state))).toBe(true);
-    expect(sameKeyRowView(keyRowView(false, {}), keyRowView(false, {}))).toBe(true);
+    expect(sameKeyRowView(keyRowView(true, state, false), keyRowView(true, state, false))).toBe(true);
+    expect(sameKeyRowView(keyRowView(false, {}, false), keyRowView(false, {}, false))).toBe(true);
+    expect(sameKeyRowView(keyRowView(true, state, true), keyRowView(true, state, true))).toBe(true);
   });
 
-  it("is false when the status, the stored key or the clear button differs", () => {
-    const stored = keyRowView(true, { lastSuccessAt: "2026-10-27T15:42:00.000Z" });
-    expect(sameKeyRowView(stored, keyRowView(true, { lastSuccessAt: "2026-10-27T16:00:00.000Z" }))).toBe(false);
-    expect(sameKeyRowView(stored, keyRowView(true, { failing: true, lastError: "auth" }))).toBe(false);
-    expect(sameKeyRowView(keyRowView(true, {}), keyRowView(false, {}))).toBe(false);
+  it("is false when the state differs: no key, stored, or replacing", () => {
+    expect(sameKeyRowView(keyRowView(true, {}, false), keyRowView(false, {}, false))).toBe(false);
+    expect(sameKeyRowView(keyRowView(true, state, false), keyRowView(true, state, true))).toBe(false);
+    expect(sameKeyRowView(keyRowView(false, {}, false), keyRowView(true, {}, true))).toBe(false);
+  });
+
+  it("is false when the status differs", () => {
+    const stored = keyRowView(true, state, false);
+    expect(sameKeyRowView(stored, keyRowView(true, { lastSuccessAt: "2026-10-27T16:00:00.000Z" }, false))).toBe(false);
+    expect(sameKeyRowView(stored, keyRowView(true, { failing: true, lastError: "auth" }, false))).toBe(false);
+  });
+
+  it("is false when only one output differs, for every output", () => {
+    const base = keyRowView(true, state, false);
+    const changed: Record<keyof KeyRowView, KeyRowView> = {
+      status: { ...base, status: "Not synced yet" },
+      placeholder: { ...base, placeholder: KEY_PLACEHOLDER },
+      ariaLabel: { ...base, ariaLabel: KEY_LABEL },
+      disabled: { ...base, disabled: !base.disabled },
+      canReplace: { ...base, canReplace: !base.canReplace },
+      canClear: { ...base, canClear: !base.canClear },
+    };
+    for (const [field, view] of Object.entries(changed)) {
+      expect({ field, same: sameKeyRowView(base, view) }).toEqual({ field, same: false });
+      expect({ field, same: sameKeyRowView(view, base) }).toEqual({ field, same: false });
+    }
   });
 });
 

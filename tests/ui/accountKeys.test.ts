@@ -2,7 +2,7 @@ import { CirclebackError } from "../../src/api/errors";
 import type { ConnectionInfo } from "../../src/api/schemas";
 import { KeyStore } from "../../src/secrets/keyStore";
 import { DeviceState } from "../../src/state/deviceState";
-import { clearKey, commitKey, testKey } from "../../src/ui/accountKeys";
+import { clearKey, commitKey, hasTypedKey, testKey } from "../../src/ui/accountKeys";
 import { NO_KEY_TO_TEST } from "../../src/ui/settingsView";
 import { logger } from "../../src/util/logger";
 import { createFakeApp } from "../harness/fakeApp";
@@ -79,6 +79,19 @@ describe("commitKey", () => {
     });
 
     expect(commitKey({ keys, device }, "a", "")).toEqual({ ok: false });
+  });
+});
+
+describe("hasTypedKey", () => {
+  it("is true for text with a key in it, whatever surrounds it", () => {
+    expect(hasTypedKey("cb_abc123")).toBe(true);
+    expect(hasTypedKey("  cb_abc123\n")).toBe(true);
+  });
+
+  it("is false for nothing, or only spaces and newlines, so the field saves nothing and clears nothing", () => {
+    expect(hasTypedKey("")).toBe(false);
+    expect(hasTypedKey("   ")).toBe(false);
+    expect(hasTypedKey(" \n\t ")).toBe(false);
   });
 });
 

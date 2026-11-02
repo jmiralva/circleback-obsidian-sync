@@ -18,10 +18,16 @@
   font-size: var(--font-ui-medium);
 }
 
-/* The API key field while this device has the key: its placeholder is a row of dots, in the normal text color so the field reads as filled and not as a grey hint. The key itself is never in the field. */
-.circleback-sync-key-stored::placeholder {
+/* The API key field while this device has the key and it is not being replaced: the field is locked and its placeholder is a row of dots, in the normal text color so the field reads as filled and not as a grey hint. The key itself is never in the field. Obsidian colors every password field's placeholder with a selector that a single class cannot outrank, so these selectors name the account card too. */
+.circleback-sync-account input.circleback-sync-key-stored::placeholder {
   color: var(--text-normal);
   opacity: 1;
+}
+
+/* Obsidian also fades a disabled field to half and shows a "not allowed" cursor. This lock is on purpose, so the dots keep their full strength and the normal cursor. */
+.circleback-sync-account input.circleback-sync-key-stored:disabled {
+  opacity: 1;
+  cursor: default;
 }
 
 /* What "Test connection" said, under the account's button. */

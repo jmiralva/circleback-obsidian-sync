@@ -31,45 +31,78 @@ export function accountStatusLine(hasKey: boolean, state: AccountDeviceState): s
 }
 
 export const NO_KEY_TO_TEST = "Enter an API key first.";
+/** The key field with no key stored on this device. */
 export const KEY_PLACEHOLDER = "Paste your Circleback API key";
 /** Twelve bullet dots (U+2022). The key is never in the field; this makes the field look filled. */
 export const KEY_STORED_PLACEHOLDER = "\u2022".repeat(12);
+/** The key field after "Replace key", while it waits for the new key. */
+export const KEY_REPLACING_PLACEHOLDER = "Paste the new API key";
 /** The field's accessible name, so that "a key is stored" is not only visual. */
 export const KEY_LABEL = "API key";
-export const KEY_STORED_LABEL = "API key stored on this device. Paste a new key to replace it.";
+export const KEY_STORED_LABEL = "API key stored on this device. Use Replace key to change it.";
+export const KEY_REPLACING_LABEL = "New API key";
+/** The button that opens a locked key field for a new key. */
+export const REPLACE_KEY_BUTTON = "Replace key";
 
-/** What the account's API key row shows: the status line, the field's look and name, and whether it offers "Clear key". */
+/** What the account's API key row shows: the status line, the field's look, state and name, and which buttons it offers. */
 export interface KeyRowView {
   status: string;
   placeholder: string;
-  /** Whether this device has the key: the field then shows its placeholder in the normal text color. */
-  keyStored: boolean;
+  /**
+   * Whether the field is locked: this device has the key and the user has not asked to replace it.
+   * A locked field shows its placeholder (dots) in the normal text color, so one output serves both.
+   */
+  disabled: boolean;
   ariaLabel: string;
+  // Each button has its own output so that its rule can change without the other's. Today both
+  // follow whether this device has a key, and both stay while a new key is being entered.
+  canReplace: boolean;
   canClear: boolean;
 }
 
-/** The key row for an account, by whether this device has its key. The key itself is never shown. */
-export function keyRowView(hasKey: boolean, state: AccountDeviceState): KeyRowView {
+/**
+ * The key row for an account, by whether this device has its key and whether the user opened the
+ * field to replace it. Without a key there is nothing to replace, so `replacing` is then ignored.
+ * The key itself is never shown.
+ */
+export function keyRowView(hasKey: boolean, state: AccountDeviceState, replacing: boolean): KeyRowView {
+  const status = accountStatusLine(hasKey, state);
+  if (!hasKey) {
+    return { status, placeholder: KEY_PLACEHOLDER, disabled: false, ariaLabel: KEY_LABEL, canReplace: false, canClear: false };
+  }
+  if (replacing) {
+    return {
+      status,
+      placeholder: KEY_REPLACING_PLACEHOLDER,
+      disabled: false,
+      ariaLabel: KEY_REPLACING_LABEL,
+      canReplace: true,
+      canClear: true,
+    };
+  }
   return {
-    status: accountStatusLine(hasKey, state),
-    placeholder: hasKey ? KEY_STORED_PLACEHOLDER : KEY_PLACEHOLDER,
-    keyStored: hasKey,
-    ariaLabel: hasKey ? KEY_STORED_LABEL : KEY_LABEL,
-    canClear: hasKey,
+    status,
+    placeholder: KEY_STORED_PLACEHOLDER,
+    disabled: true,
+    ariaLabel: KEY_STORED_LABEL,
+    canReplace: true,
+    canClear: true,
   };
 }
 
 /**
  * Whether two key rows show the same, so that the row is only rewritten when it would change.
  * Rewriting it on every status update, which includes each progress tick of a full sync, would
- * drop a text selection in the status line.
+ * drop a text selection in the status line. Entering or leaving "replacing" changes the
+ * placeholder, the name and `disabled`, so this sees it.
  */
 export function sameKeyRowView(a: KeyRowView, b: KeyRowView): boolean {
   return (
     a.status === b.status &&
     a.placeholder === b.placeholder &&
-    a.keyStored === b.keyStored &&
+    a.disabled === b.disabled &&
     a.ariaLabel === b.ariaLabel &&
+    a.canReplace === b.canReplace &&
     a.canClear === b.canClear
   );
 }

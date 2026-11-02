@@ -15,6 +15,15 @@ interface KeyDeps {
 export type KeyChange = { ok: true; hasKey: boolean } | { ok: false };
 
 /**
+ * Whether the key field holds something to save: anything but nothing, or only spaces and newlines.
+ * The field never clears a key, so it asks this before saving and leaves an empty value alone.
+ * Only `clearKey` clears. Backing out of an empty field after "Replace key" asks the same question.
+ */
+export function hasTypedKey(typed: string): boolean {
+  return typed.trim() !== "";
+}
+
+/**
  * Stores what the user typed as the account's key, or clears the stored key when it is empty. The
  * key store does not trim, and a pasted key often has a space or newline after it. On success it
  * forgets the cached owner: that belongs to the old key, and a key for someone else must not keep
